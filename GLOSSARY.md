@@ -31,7 +31,7 @@ Turning an amount into another currency at the exchange rate of its entry date, 
 _Avoid_: FX mode, repricing
 
 **Provisional**:
-A converted amount that uses an earlier day's rate because its own date's rate is not available yet.
+A converted amount that uses an earlier day's rate because its own date's rate is not published yet; a date the provider never publishes a rate for, such as a weekend, uses the latest earlier rate and is not provisional.
 _Avoid_: Estimated, approximate
 
 **Expense**:
