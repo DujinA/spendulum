@@ -1,6 +1,6 @@
 # Spendulum
 
-A personal budget tracker for a single user: it records expenses and income, sets targets per category, and reports how actual spending compares to them.
+A personal budget tracker: each user records their own expenses and income, sets targets per category, and sees how actual spending compares to them.
 
 ## Money
 
@@ -61,6 +61,10 @@ _Avoid_: Combine, dedupe
 **Deleted entry**:
 An entry the user removed; it no longer appears in any list or report.
 _Avoid_: Trashed, voided
+
+**Import**:
+A one-off load of one user's past entries, categories and budget targets from another tool's export; it can be undone as a whole.
+_Avoid_: Upload, migration, sync
 
 ## Budgets and reports
 
