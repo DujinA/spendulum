@@ -2,6 +2,20 @@
 
 A personal budget tracker: each user records their own expenses and income, sets targets per category, and sees how actual spending compares to them.
 
+## People
+
+**User**:
+A person who signs in and owns their own entries, vendors, categories, budget targets and settings.
+_Avoid_: Tenant, member, customer
+
+**Account**:
+A user's sign-in identity together with all the data they own; the unit that is exported or deleted.
+_Avoid_: Profile, tenant
+
+**Operator**:
+The person who runs the instance and its command-line tools; never a role inside the app.
+_Avoid_: Admin, superuser
+
 ## Money
 
 **Primary currency**:
