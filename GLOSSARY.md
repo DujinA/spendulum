@@ -61,3 +61,37 @@ _Avoid_: Combine, dedupe
 **Deleted entry**:
 An entry the user removed; it no longer appears in any list or report.
 _Avoid_: Trashed, voided
+
+## Budgets and reports
+
+**Budget target**:
+A monthly amount, in its own currency, that one category is expected to stay within (expense) or reach (income), from a start month until it is changed or ended.
+_Avoid_: Budget, limit, goal, allowance
+
+**Period**:
+The date range a report covers: a preset or a custom range.
+_Avoid_: Timeframe, window
+
+**Completed month**:
+A calendar month that has fully passed in the user's time zone.
+_Avoid_: Closed month, past month
+
+**Monthly average**:
+A period's total over its completed months, divided by the number of those months.
+_Avoid_: Mean, run rate
+
+**Variance**:
+Actual minus target, as an amount and as a percent of the target.
+_Avoid_: Deviation, delta, difference
+
+**Untargeted spending**:
+Expenses in categories that have no budget target for that month.
+_Avoid_: Unbudgeted, other spending
+
+**Savings**:
+Income minus expenses over a period.
+_Avoid_: Net, profit, surplus
+
+**Savings rate**:
+Savings divided by income over a period.
+_Avoid_: Savings ratio, margin
