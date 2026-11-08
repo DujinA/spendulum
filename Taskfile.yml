@@ -1,0 +1,128 @@
+# https://taskfile.dev. CI and agents run these same targets.
+version: "3"
+
+vars:
+  GO_TOOL: go tool -modfile=tools/go.mod
+  IMAGE: spendulum:dev
+
+env:
+  SPENDULUM_DATABASE_URL:
+    sh: echo "${SPENDULUM_DATABASE_URL:-postgres://spendulum:spendulum@localhost:${SPENDULUM_DB_PORT:-5432}/spendulum?sslmode=disable}"
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  install:
+    desc: Install the web and e2e dependencies
+    cmds:
+      - pnpm install --frozen-lockfile
+    sources:
+      - pnpm-lock.yaml
+      - "*/package.json"
+
+  gen:
+    desc: Regenerate Go server stubs, sqlc code and TypeScript API types
+    deps: [install]
+    cmds:
+      - task: gen:go
+      - pnpm --filter @spendulum/web gen
+
+  gen:go:
+    internal: true
+    dir: backend
+    cmds:
+      - "{{.GO_TOOL}} oapi-codegen -config oapi-codegen.yaml ../api/openapi.yaml"
+      - "{{.GO_TOOL}} sqlc generate"
+
+  lint:
+    desc: golangci-lint, eslint and tsc
+    deps: [install]
+    cmds:
+      - task: lint:go
+      - pnpm --filter @spendulum/web lint
+      - pnpm --filter @spendulum/web typecheck
+      - pnpm --filter @spendulum/e2e typecheck
+
+  lint:go:
+    internal: true
+    dir: backend
+    cmds:
+      - "{{.GO_TOOL}} golangci-lint run ./..."
+
+  test:
+    desc: Go tests with the race detector (Docker runs PostgreSQL) and Vitest
+    deps: [install]
+    cmds:
+      - task: test:go
+      - pnpm --filter @spendulum/web test
+
+  test:go:
+    internal: true
+    dir: backend
+    cmds:
+      - go test -race ./...
+
+  check:
+    desc: Everything CI checks except e2e. Stage your changes first; the diff check compares the tree with the index.
+    cmds:
+      - task: gen
+      - git diff --exit-code
+      - task: lint
+      - task: test
+
+  db:
+    desc: Start the development database
+    cmds:
+      - docker compose up --detach --wait db
+
+  migrate:
+    desc: Apply pending migrations to the development database
+    deps: [db]
+    dir: backend
+    cmds:
+      - go run ./cmd/spendulum migrate
+
+  dev:
+    desc: Database, migrations, Go server on :8080 and the Vite dev server with /api proxied
+    deps: [install]
+    cmds:
+      - task: migrate
+      - task: dev:servers
+
+  dev:servers:
+    internal: true
+    deps: [dev:api, dev:web]
+
+  dev:api:
+    internal: true
+    dir: backend
+    cmds:
+      - go run ./cmd/spendulum serve
+
+  dev:web:
+    internal: true
+    cmds:
+      - pnpm --filter @spendulum/web dev
+
+  build:
+    desc: Build the image
+    cmds:
+      - docker build --tag {{.IMAGE}} .
+
+  e2e:
+    desc: Build the image and run the Playwright smoke tests against it on compose
+    deps: [install]
+    vars:
+      COMPOSE: docker compose --file e2e/compose.e2e.yaml
+    env:
+      SPENDULUM_IMAGE: spendulum:e2e
+      E2E_UID:
+        sh: id -u
+      E2E_GID:
+        sh: id -g
+    cmds:
+      - docker build --tag spendulum:e2e .
+      - defer: "{{.COMPOSE}} --profile test down --volumes --remove-orphans"
+      - "{{.COMPOSE}} --profile test run --rm playwright"

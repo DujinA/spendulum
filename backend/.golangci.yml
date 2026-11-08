@@ -1,0 +1,93 @@
+# golangci-lint v2, pinned in tools/go.mod. Strict: every linter is on except the
+# ones listed under disable, each with the reason it is off.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: all
+  disable:
+    - exhaustruct     # zero values are idiomatic; listing every field is noise
+    - exhaustruct_v5  # same
+    - varnamelen      # short names in small scopes are idiomatic Go
+    - wsl             # whitespace style is gofumpt's job
+    - wsl_v5          # same
+    - nlreturn        # same
+    - lll             # gofumpt formats; long strings and signatures are fine
+    - mnd             # timeouts and HTTP codes read better as literals
+    - ireturn         # http.Handler and pgx.Rows are returned by design
+    - paralleltest    # tests share one PostgreSQL container per package
+    - tparallel       # same
+    - testpackage     # some tests must reach unexported seams (export_test.go)
+    - godox           # TODOs are allowed; issues track the work
+    - nonamedreturns  # named returns document results
+    - noinlineerr     # `if err := f(); err != nil` is idiomatic
+    - funcorder       # order follows reading flow, not visibility
+    - gomodguard      # deprecated, replaced by depguard
+    - gomodguard_v2   # dependencies are reviewed in the PR's Assumptions
+    - err113          # wrapping with fmt.Errorf("...: %w") is the project style
+    - tagliatelle     # JSON tag case follows api/openapi.yaml
+    - godoclint       # revive's exported rule covers doc comments
+    - godot           # comment punctuation is not worth a red check
+
+  settings:
+    depguard:
+      rules:
+        # ADR 0010: domain types and use cases stay free of transport and storage.
+        domain-and-service:
+          files:
+            - "**/domain.go"
+            - "**/service.go"
+          deny:
+            - pkg: net/http
+              desc: domain and service code must not know about HTTP (ADR 0010)
+            - pkg: github.com/jackc/pgx
+              desc: domain and service code must not know about pgx (ADR 0010)
+            - pkg: github.com/DujinA/spendulum/backend/internal/platform/db/gen
+              desc: domain and service code must not import the sqlc package (ADR 0010)
+        main:
+          list-mode: lax
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: use the standard errors package
+            - pkg: math/rand$
+              desc: use math/rand/v2 or crypto/rand
+    revive:
+      rules:
+        - name: exported
+    sloglint:
+      kv-only: false
+      attr-only: true
+      no-global: all
+      static-msg: true
+    wrapcheck:
+      ignore-sig-regexps:
+        - \.Errorf\(
+        - errors\.New\(
+        - errors\.Join\(
+        - \(context\.Context\)\.Err\(
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 80
+      statements: 50
+
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [funlen, maintidx, dupl, goconst, gocognit, cyclop, gosec, noctx, errcheck, forcetypeassert, contextcheck, wrapcheck]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/DujinA/spendulum
+  exclusions:
+    generated: strict

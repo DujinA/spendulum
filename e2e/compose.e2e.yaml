@@ -1,0 +1,67 @@
+# End-to-end environment for the image under test (task e2e). Every run starts on an
+# empty database: PostgreSQL keeps its data in tmpfs.
+name: spendulum-e2e
+
+x-database-url: &database-url postgres://spendulum:spendulum@db:5432/spendulum?sslmode=disable
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: spendulum
+      POSTGRES_PASSWORD: spendulum
+      POSTGRES_DB: spendulum
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spendulum -d spendulum"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: ${SPENDULUM_IMAGE:-spendulum:e2e}
+    command: ["migrate"]
+    environment:
+      SPENDULUM_DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Placeholder for the Frankfurter stub; see stubs/rates/README.md.
+  rates:
+    image: busybox:1.37
+    command: ["httpd", "-f", "-p", "8080", "-h", "/srv"]
+    volumes:
+      - ./stubs/rates:/srv:ro
+
+  # Not named "app": Chromium upgrades http://app to HTTPS, because the .app TLD is HSTS-preloaded.
+  spendulum:
+    image: ${SPENDULUM_IMAGE:-spendulum:e2e}
+    command: ["serve"]
+    environment:
+      SPENDULUM_DATABASE_URL: *database-url
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rates:
+        condition: service_started
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.65.0-noble
+    profiles: ["test"]
+    working_dir: /work/e2e
+    command: ["npx", "--no-install", "playwright", "test"]
+    user: ${E2E_UID:-1000}:${E2E_GID:-1000}
+    ipc: host
+    environment:
+      BASE_URL: http://spendulum:8080
+      CI: ${CI:-}
+      HOME: /tmp
+    volumes:
+      - ..:/work
+    depends_on:
+      spendulum:
+        condition: service_started
