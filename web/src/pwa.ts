@@ -11,7 +11,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   manifest: {
     name: "Spendulum",
     short_name: "Spendulum",
-    description: "Record expenses and income and compare spending with budget targets.",
+    description: "Record expenses and income and compare them with budget targets.",
     display: "standalone",
     start_url: "/",
     scope: "/",

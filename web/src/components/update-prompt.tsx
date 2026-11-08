@@ -44,7 +44,7 @@ export function UpdatePrompt() {
       className="bg-popover text-popover-foreground fixed inset-x-4 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border p-3 shadow-lg"
     >
       <span className="text-sm">A new version of Spendulum is ready.</span>
-      <Button size="lg" onClick={() => void updateServiceWorker(true)}>
+      <Button className="h-11" onClick={() => void updateServiceWorker(true)}>
         Reload
       </Button>
     </div>

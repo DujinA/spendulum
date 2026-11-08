@@ -15,6 +15,8 @@ Read with ADR 0010 (backend packaged by feature) and ADR 0009 (user-scoped rows)
 
 ## Database
 
+Here "transaction" means a database transaction and "migration" a Goose schema migration. These are not the domain terms that `GLOSSARY.md` avoids.
+
 - SQL lives in `backend/queries/*.sql`; sqlc generates one package, `platform/db/gen`. No ORM, and no other way to query.
 - Every Postgres adapter is built on the `*gen.Queries` from `db.DB.Queries()`. Each call runs under the `SPENDULUM_DB_TIMEOUT` deadline, so a stuck database never hangs a request.
 - A transaction that spans features uses one shared helper, `platform/db.InTx(ctx, fn)` (ADR 0010). The first slice that needs a transaction adds it; never invent another pattern.

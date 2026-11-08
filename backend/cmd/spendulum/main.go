@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -21,6 +20,16 @@ import (
 
 const usage = "usage: spendulum <serve|migrate>"
 
+// command runs one subcommand until it finishes or ctx is cancelled.
+type command func(ctx context.Context, cfg config.Config, logger *slog.Logger) error
+
+func commands() map[string]command {
+	return map[string]command{
+		"serve":   serve,
+		"migrate": migrate,
+	}
+}
+
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], environ(), os.Stdout))
 }
@@ -31,7 +40,14 @@ func run(ctx context.Context, args []string, env map[string]string, out io.Write
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
-	if len(args) == 0 || (args[0] != "serve" && args[0] != "migrate") {
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(out, usage)
+
+		return 2
+	}
+
+	cmd, ok := commands()[args[0]]
+	if !ok {
 		_, _ = fmt.Fprintln(out, usage)
 
 		return 2
@@ -46,14 +62,7 @@ func run(ctx context.Context, args []string, env map[string]string, out io.Write
 
 	logger := logging.New(out, cfg.LogLevel)
 
-	switch args[0] {
-	case "serve":
-		err = serve(ctx, cfg, logger)
-	default:
-		err = migrate(ctx, cfg, logger)
-	}
-
-	if err != nil {
+	if err := cmd(ctx, cfg, logger); err != nil {
 		logger.Error("command failed", slog.String("command", args[0]), slog.Any("error", err))
 
 		return 1
@@ -72,5 +81,3 @@ func environ() map[string]string {
 
 	return env
 }
-
-var errPendingMigrations = errors.New("the database has pending migrations: run spendulum migrate first")

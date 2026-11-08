@@ -15,8 +15,11 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/webui"
 )
 
+var errPendingMigrations = errors.New("the database has pending migrations: run spendulum migrate first")
+
 // serve runs the HTTP server until ctx is cancelled, then drains in-flight requests
-// for up to cfg.ShutdownTimeout and closes the database pool.
+// for up to cfg.ShutdownTimeout and closes the database pool. A drain that runs past
+// the deadline closes the remaining connections and still counts as a clean stop.
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	d, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBTimeout)
 	if err != nil {
@@ -64,7 +67,8 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
+		logger.Warn("shutdown deadline passed; closing the remaining connections", slog.Any("error", err))
+		_ = srv.Close()
 	}
 
 	if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {

@@ -17,7 +17,7 @@ The web app in `web/` is one PWA used on desktop and on iPhone from the home scr
 - Amounts are integer minor units, formatted through one `formatMoney` helper (for example `1,780.80 din`). No float arithmetic.
 - Inputs are at least 16 px, so iOS does not zoom on focus. Tap targets are at least 44 px.
 - Respect safe-area insets with `env(safe-area-inset-*)`. The viewport uses `viewport-fit=cover`.
-- Light and dark mode follow the system setting (`prefers-color-scheme`); use the theme colour tokens in `src/index.css`, never fixed colours.
+- Light and dark mode follow the system setting (`prefers-color-scheme`); use the theme colour tokens in `src/index.css`, never fixed colours. The exceptions are the `theme-color` meta tags in `index.html` and the manifest colours in `src/pwa.ts`, which cannot read CSS variables.
 - The installed web app has no reload button and no pull-to-refresh. It must refresh its own data and handle a `401` by itself.
 - Phones get the bottom tab bar; from the `md` breakpoint up the same items are a sidebar (`src/components/app-shell.tsx`).
 - List a new dependency under **Assumptions** in the PR body.

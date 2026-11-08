@@ -300,3 +300,36 @@ func (b *syncBuffer) String() string {
 
 	return b.buf.String()
 }
+
+// A drain that outlives SPENDULUM_SHUTDOWN_TIMEOUT closes the remaining connections
+// and still exits 0.
+func TestSIGTERMPastTheShutdownDeadlineStillExitsZero(t *testing.T) {
+	addr := freeAddr(t)
+	env := map[string]string{
+		"SPENDULUM_DATABASE_URL":     "postgres://app:secret@" + blackhole(t) + "/spendulum?sslmode=disable",
+		"SPENDULUM_HTTP_ADDR":        addr,
+		"SPENDULUM_DB_TIMEOUT":       "3s",
+		"SPENDULUM_SHUTDOWN_TIMEOUT": "200ms",
+	}
+
+	done := startServe(t.Context(), env)
+
+	waitUntilServing(t, addr)
+
+	go get(t, addr, "/readyz") // stays in flight for the 3 s DB timeout
+
+	time.Sleep(200 * time.Millisecond)
+
+	if err := syscall.Kill(syscall.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatalf("send SIGTERM: %v", err)
+	}
+
+	select {
+	case res := <-done:
+		if res.code != 0 {
+			t.Errorf("serve exited %d after the shutdown deadline, want 0:\n%s", res.code, res.out)
+		}
+	case <-time.After(2500 * time.Millisecond):
+		t.Fatal("serve waited for the in-flight request past the shutdown deadline")
+	}
+}
