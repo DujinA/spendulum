@@ -33,7 +33,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("listen on SPENDULUM_HTTP_ADDR %q: %w", cfg.HTTPAddr, err)
 	}
 
 	srv := &http.Server{

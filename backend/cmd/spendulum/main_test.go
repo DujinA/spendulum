@@ -48,6 +48,25 @@ func TestServeWithAnInvalidVariableExitsAndNamesIt(t *testing.T) {
 	}
 }
 
+// The OS decides which addresses it can listen on, so serve names the variable
+// when listening fails.
+func TestServeOnAnAddressItCannotListenOnExitsAndNamesIt(t *testing.T) {
+	var out syncBuffer
+
+	env := map[string]string{
+		"SPENDULUM_DATABASE_URL": "postgres://app:secret@" + closedPort(t) + "/spendulum?sslmode=disable",
+		"SPENDULUM_HTTP_ADDR":    "127.0.0.1:99999",
+	}
+
+	if code := run(t.Context(), []string{"serve"}, env, &out); code == 0 {
+		t.Fatal("serve exited 0 on port 99999")
+	}
+
+	if !strings.Contains(out.String(), "SPENDULUM_HTTP_ADDR") {
+		t.Errorf("output does not name SPENDULUM_HTTP_ADDR:\n%s", out.String())
+	}
+}
+
 func TestUnknownCommandExitsNonZero(t *testing.T) {
 	var out syncBuffer
 

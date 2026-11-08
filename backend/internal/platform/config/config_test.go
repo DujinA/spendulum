@@ -59,6 +59,11 @@ func TestLoadNamesTheBadVariable(t *testing.T) {
 			wantVar: "SPENDULUM_DATABASE_URL",
 		},
 		{
+			name:    "database URL with an invalid pool option",
+			env:     map[string]string{"SPENDULUM_DATABASE_URL": "postgres://app:secret@localhost:5432/spendulum?pool_max_conns=nope"},
+			wantVar: "SPENDULUM_DATABASE_URL",
+		},
+		{
 			name:    "HTTP address without a port",
 			env:     with(validEnv(), "SPENDULUM_HTTP_ADDR", "not-an-address"),
 			wantVar: "SPENDULUM_HTTP_ADDR",

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Config is every setting the binary reads. Each field names its environment variable.
@@ -59,7 +59,7 @@ func (c Config) validate() error {
 	u, err := url.Parse(c.DatabaseURL)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
 		errs = append(errs, &VarError{Var: "SPENDULUM_DATABASE_URL", Reason: "must be a postgres:// URL with a host"})
-	} else if _, err := pgconn.ParseConfig(c.DatabaseURL); err != nil {
+	} else if _, err := pgxpool.ParseConfig(c.DatabaseURL); err != nil {
 		errs = append(errs, &VarError{Var: "SPENDULUM_DATABASE_URL", Reason: "is not a valid connection URL"})
 	}
 
