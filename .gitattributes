@@ -3,7 +3,6 @@
 *.png binary
 *.ico binary
 
-# Generated code: never edited by hand, collapsed in diffs.
 backend/internal/httpapi/gen/** linguist-generated=true
 backend/internal/platform/db/gen/** linguist-generated=true
 web/src/api/schema.gen.ts linguist-generated=true

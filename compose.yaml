@@ -1,4 +1,3 @@
-# Local development database (task dev). The app itself runs on the host.
 name: spendulum
 
 services:

@@ -1,5 +1,3 @@
-// Package httpapi is the HTTP edge: it serves the oapi-codegen strict server, maps
-// errors to RFC 9457 problem+json, and falls back to the SPA outside /api.
 package httpapi
 
 import (
@@ -10,26 +8,22 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/httpapi/gen"
 )
 
-// Pinger reports whether the database answers.
 type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-// Deps are the collaborators the HTTP edge needs.
 type Deps struct {
 	DB     Pinger
 	WebUI  http.Handler
 	Logger *slog.Logger
 }
 
-// server implements gen.StrictServerInterface. Feature handlers join it as they arrive.
 type server struct {
 	probes
 }
 
 var _ gen.StrictServerInterface = server{}
 
-// NewHandler returns the handler for every request the binary serves.
 func NewHandler(d Deps) http.Handler {
 	mux := http.NewServeMux()
 

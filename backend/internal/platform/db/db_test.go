@@ -22,7 +22,6 @@ func TestPingSucceedsOnAMigratedDatabase(t *testing.T) {
 }
 
 func TestPingOnAStuckDatabaseFailsWithinTheTimeout(t *testing.T) {
-	// A listener that accepts connections and never answers stands in for a stuck database.
 	d := open(t, "postgres://app:secret@"+blackhole(t)+"/spendulum?sslmode=disable", 200*time.Millisecond)
 
 	start := time.Now()

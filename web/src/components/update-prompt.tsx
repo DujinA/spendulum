@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 
 const hourly = 60 * 60 * 1000;
 
-// The installed web app on iOS is resumed, not reloaded, so it checks for a new
-// service worker on every resume and hourly, and offers a reload when one is waiting.
+// iOS resumes the installed web app instead of reloading it, so check on every resume.
 export function UpdatePrompt() {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration>();
   const {

@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Dark mode follows the system setting. */
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 :root {

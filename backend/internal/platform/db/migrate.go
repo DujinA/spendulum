@@ -12,9 +12,6 @@ import (
 	"github.com/DujinA/spendulum/backend/migrations"
 )
 
-// Migrate applies every pending embedded migration and returns how many it applied.
-// A session advisory lock keeps two concurrent runs from racing. The caller bounds
-// the whole run with ctx.
 func (d *DB) Migrate(ctx context.Context) (int, error) {
 	p, sqlDB, err := d.provider()
 	if err != nil {
@@ -30,8 +27,7 @@ func (d *DB) Migrate(ctx context.Context) (int, error) {
 	return len(results), nil
 }
 
-// HasPending reports whether an embedded migration is not applied yet. A database
-// newer than the binary has nothing pending (ADR 0008).
+// A database newer than the binary has nothing pending (ADR 0008).
 func (d *DB) HasPending(ctx context.Context) (bool, error) {
 	p, sqlDB, err := d.provider()
 	if err != nil {

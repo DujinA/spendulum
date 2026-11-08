@@ -1,7 +1,3 @@
-// Command spendulum is the one Spendulum binary.
-//
-//	spendulum serve     runs the HTTP server: the API and the web app
-//	spendulum migrate   applies pending database migrations (ADR 0004)
 package main
 
 import (
@@ -20,7 +16,6 @@ import (
 
 const usage = "usage: spendulum <serve|migrate>"
 
-// command runs one subcommand until it finishes or ctx is cancelled.
 type command func(ctx context.Context, cfg config.Config, logger *slog.Logger) error
 
 func commands() map[string]command {
@@ -34,8 +29,6 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], environ(), os.Stdout))
 }
 
-// run executes one subcommand and returns the process exit code. SIGTERM and SIGINT
-// cancel the context the subcommand runs under.
 func run(ctx context.Context, args []string, env map[string]string, out io.Writer) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
 	defer stop()

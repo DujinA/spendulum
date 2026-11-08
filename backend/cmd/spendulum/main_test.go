@@ -48,8 +48,6 @@ func TestServeWithAnInvalidVariableExitsAndNamesIt(t *testing.T) {
 	}
 }
 
-// The OS decides which addresses it can listen on, so serve names the variable
-// when listening fails.
 func TestServeOnAnAddressItCannotListenOnExitsAndNamesIt(t *testing.T) {
 	var out syncBuffer
 
@@ -149,9 +147,7 @@ func TestServeOnAMigratedDatabaseIsReady(t *testing.T) {
 	}
 }
 
-// SIGTERM: stop accepting connections, finish in-flight requests, close the pool, exit 0.
-// The database never answers, so /readyz stays in flight for the whole DB timeout.
-// That makes it the in-flight request; it also shows serve starts without a database.
+// The database never answers, so /readyz stays in flight through shutdown.
 func TestSIGTERMDrainsInFlightRequestsAndExitsZero(t *testing.T) {
 	addr := freeAddr(t)
 	env := map[string]string{
@@ -247,7 +243,6 @@ func waitUntilServing(t *testing.T, addr string) {
 	t.Fatalf("server on %s never answered /healthz", addr)
 }
 
-// freeAddr returns a local address nothing listens on, for serve to bind.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 
@@ -262,7 +257,6 @@ func freeAddr(t *testing.T) string {
 	return addr
 }
 
-// closedPort returns an address that refuses connections.
 func closedPort(t *testing.T) string {
 	t.Helper()
 
@@ -300,7 +294,6 @@ func blackhole(t *testing.T) string {
 	return ln.Addr().String()
 }
 
-// syncBuffer is a bytes.Buffer safe for the logger and the test to share.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -320,8 +313,6 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// A drain that outlives SPENDULUM_SHUTDOWN_TIMEOUT closes the remaining connections
-// and still exits 0.
 func TestSIGTERMPastTheShutdownDeadlineStillExitsZero(t *testing.T) {
 	addr := freeAddr(t)
 	env := map[string]string{

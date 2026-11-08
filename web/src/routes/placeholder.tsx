@@ -1,4 +1,3 @@
-// A route that exists so navigation works; its slice replaces it.
 export function Placeholder({ title }: { title: string }) {
   return (
     <section className="flex flex-col gap-2">

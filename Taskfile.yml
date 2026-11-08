@@ -1,4 +1,3 @@
-# https://taskfile.dev. CI and agents run these same targets.
 version: "3"
 
 vars:

@@ -1,7 +1,5 @@
 import type { VitePWAOptions } from "vite-plugin-pwa";
 
-// The installed web app on iOS (issue #8): updates wait for the user (prompt mode),
-// the service worker precaches only the app shell, and /api is never served from it.
 export const pwaOptions: Partial<VitePWAOptions> = {
   registerType: "prompt",
   injectRegister: false,

@@ -1,7 +1,3 @@
-// Package dbtest gives integration tests a real PostgreSQL 18 database.
-//
-// Call Main from TestMain. It starts one container per test binary and migrates a
-// template database once; NewDatabase then clones a fresh, migrated database per test.
 package dbtest
 
 import (
@@ -22,16 +18,12 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 )
 
-// Image is the PostgreSQL image every integration test runs on.
 const Image = "postgres:18"
 
 const templateName = "spendulum_template"
 
-// adminURL points at the container's maintenance database. Main sets it once,
-// before any test runs, and tests only read it.
 var adminURL string //nolint:gochecknoglobals // set once by Main, shared by the tests of one binary
 
-// Main starts PostgreSQL, migrates the template database, runs the tests and exits.
 func Main(m *testing.M) {
 	os.Exit(run(m))
 }
@@ -92,15 +84,12 @@ func createTemplate(ctx context.Context) error {
 	return nil
 }
 
-// NewDatabase returns the URL of a fresh database with every migration applied.
-// The database is dropped when the test ends.
 func NewDatabase(tb testing.TB) string {
 	tb.Helper()
 
 	return newDatabase(tb, "TEMPLATE "+templateName)
 }
 
-// NewEmptyDatabase returns the URL of a fresh database with no migration applied.
 func NewEmptyDatabase(tb testing.TB) string {
 	tb.Helper()
 

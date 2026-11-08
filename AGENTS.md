@@ -56,6 +56,10 @@ Prerequisites: Go, a C compiler (sqlc builds with cgo), Node 26 LTS, pnpm, Task 
 
 Run `task check` before every push. Also run `task e2e` when a user journey or the `Dockerfile` changed.
 
+## Comments
+
+Names, types and tests carry the meaning. Write a comment only for what the code cannot show: a non-obvious reason, a gotcha, or the ADR that decides the behaviour. Keep it to one line. Directives (`//go:embed`, `//nolint:<linter> // reason`, `-- +goose Up`) are code. Exported Go identifiers and packages need no doc comment.
+
 ## Definition of Done
 
 1. `task check` passes locally, and `ci-ok` passes on the PR.

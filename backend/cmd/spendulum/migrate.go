@@ -9,7 +9,6 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 )
 
-// migrate applies every pending migration. It fails when the database is unreachable.
 func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	d, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBTimeout)
 	if err != nil {

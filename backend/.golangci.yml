@@ -1,5 +1,3 @@
-# golangci-lint v2, pinned in tools/go.mod. Strict: every linter is on except the
-# ones listed under disable, each with the reason it is off.
 version: "2"
 
 run:
@@ -28,7 +26,8 @@ linters:
     - gomodguard_v2   # dependencies are reviewed in the PR's Assumptions
     - err113          # wrapping with fmt.Errorf("...: %w") is the project style
     - tagliatelle     # JSON tag case follows api/openapi.yaml
-    - godoclint       # revive's exported rule covers doc comments
+    - godoclint       # comments only where the code cannot say it (AGENTS.md)
+    - revive          # same: its exported rule demands doc comments
     - godot           # comment punctuation is not worth a red check
 
   settings:
@@ -53,9 +52,6 @@ linters:
               desc: use the standard errors package
             - pkg: math/rand$
               desc: use math/rand/v2 or crypto/rand
-    revive:
-      rules:
-        - name: exported
     sloglint:
       kv-only: false
       attr-only: true

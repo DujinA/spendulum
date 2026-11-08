@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-// noStoreOutsideSPA marks API and probe responses uncacheable, so neither the browser
-// nor the service worker keeps them. The SPA handler sets its own Cache-Control.
+// Neither the browser nor the service worker may keep API or probe responses.
 func noStoreOutsideSPA(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPI(r.URL.Path) || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
@@ -36,8 +35,7 @@ func (s *statusRecorder) WriteHeader(code int) {
 
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
-// logRequests logs one line per API request. It logs the method, path and status
-// only: never a body, so amounts, vendor names and notes stay out of the logs.
+// Method, path and status only: a body would put amounts, vendor names and notes in the logs.
 func logRequests(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAPI(r.URL.Path) {

@@ -1,6 +1,4 @@
--- The baseline migration. It creates nothing: it gives Goose a first version, so
--- `spendulum migrate` has a migration to apply and the API has one to check for.
--- Tables arrive with the slices that need them (ADR 0008, ADR 0009).
+-- Gives Goose a first version. Tables arrive with the slices that need them (ADR 0008).
 
 -- +goose Up
 SELECT 1;

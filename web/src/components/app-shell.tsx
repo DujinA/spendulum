@@ -16,7 +16,6 @@ const navItems: NavItem[] = [
   { to: "/more", label: "More", icon: Ellipsis },
 ];
 
-// The page frame: a bottom tab bar on phones and a sidebar from the md breakpoint up.
 export function AppShell() {
   return (
     <div className="min-h-dvh md:flex">

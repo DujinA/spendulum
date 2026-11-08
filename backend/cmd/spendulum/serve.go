@@ -17,9 +17,7 @@ import (
 
 var errPendingMigrations = errors.New("the database has pending migrations: run spendulum migrate first")
 
-// serve runs the HTTP server until ctx is cancelled, then drains in-flight requests
-// for up to cfg.ShutdownTimeout and closes the database pool. A drain that runs past
-// the deadline closes the remaining connections and still counts as a clean stop.
+// A drain past the deadline closes the remaining connections and still exits 0.
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	d, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBTimeout)
 	if err != nil {
@@ -80,8 +78,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	return nil
 }
 
-// checkMigrations stops serve when migrations are pending (ADR 0004). An unreachable
-// database does not stop it: the pool connects lazily and /readyz reports the outage.
+// Pending migrations stop serve (ADR 0004). An unreachable database does not: /readyz reports it.
 func checkMigrations(ctx context.Context, d *db.DB, logger *slog.Logger) error {
 	pending, err := d.HasPending(ctx)
 

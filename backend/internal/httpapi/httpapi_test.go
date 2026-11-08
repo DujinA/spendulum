@@ -177,7 +177,6 @@ func assertProblem(t *testing.T, res response, wantStatus int) {
 	}
 }
 
-// assertMatchesSpec validates the response against api/openapi.yaml.
 func assertMatchesSpec(t *testing.T, res response) {
 	t.Helper()
 

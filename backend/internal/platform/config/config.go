@@ -1,5 +1,3 @@
-// Package config loads the process configuration from environment variables and
-// validates it, so an invalid setting stops the process at startup.
 package config
 
 import (
@@ -15,24 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Config is every setting the binary reads. Each field names its environment variable.
 type Config struct {
-	// DatabaseURL is the PostgreSQL connection URL, for example
-	// postgres://user:password@localhost:5432/spendulum.
-	DatabaseURL string `env:"SPENDULUM_DATABASE_URL,required,notEmpty"`
-	// HTTPAddr is the address `serve` listens on.
-	HTTPAddr string `env:"SPENDULUM_HTTP_ADDR" envDefault:":8080"`
-	// DBTimeout bounds every database call and every connection attempt.
-	DBTimeout time.Duration `env:"SPENDULUM_DB_TIMEOUT" envDefault:"5s"`
-	// MigrateTimeout bounds one whole `spendulum migrate` run.
-	MigrateTimeout time.Duration `env:"SPENDULUM_MIGRATE_TIMEOUT" envDefault:"5m"`
-	// ShutdownTimeout is how long `serve` waits for in-flight requests after SIGTERM.
-	ShutdownTimeout time.Duration `env:"SPENDULUM_SHUTDOWN_TIMEOUT" envDefault:"20s"`
-	// LogLevel is one of debug, info, warn or error.
-	LogLevel string `env:"SPENDULUM_LOG_LEVEL" envDefault:"info"`
+	DatabaseURL     string        `env:"SPENDULUM_DATABASE_URL,required,notEmpty"`
+	HTTPAddr        string        `env:"SPENDULUM_HTTP_ADDR"                      envDefault:":8080"`
+	DBTimeout       time.Duration `env:"SPENDULUM_DB_TIMEOUT"                     envDefault:"5s"`
+	MigrateTimeout  time.Duration `env:"SPENDULUM_MIGRATE_TIMEOUT"                envDefault:"5m"`
+	ShutdownTimeout time.Duration `env:"SPENDULUM_SHUTDOWN_TIMEOUT"               envDefault:"20s"`
+	LogLevel        string        `env:"SPENDULUM_LOG_LEVEL"                      envDefault:"info"`
 }
 
-// VarError reports an invalid or missing environment variable by name.
 type VarError struct {
 	Var    string
 	Reason string
@@ -42,8 +31,6 @@ func (e *VarError) Error() string {
 	return fmt.Sprintf("config: %s: %s", e.Var, e.Reason)
 }
 
-// Load reads the configuration from environ, a map of environment variables.
-// The returned error is a *VarError, or an errors.Join of them, naming each bad variable.
 func Load(environ map[string]string) (Config, error) {
 	cfg, err := env.ParseAsWithOptions[Config](env.Options{Environment: environ})
 	if err != nil {
@@ -86,8 +73,7 @@ func (c Config) validate() error {
 	return errors.Join(errs...)
 }
 
-// fromEnvError turns the env library's errors into VarErrors, which always name the
-// variable; the library's own parse errors name only the Go field.
+// The env library's parse errors name the Go field, not the variable.
 func fromEnvError(err error) error {
 	var agg env.AggregateError
 	if !errors.As(err, &agg) {
@@ -118,7 +104,6 @@ func fromEnvError(err error) error {
 	return errors.Join(errs...)
 }
 
-// varName returns the environment variable name declared on the Config field.
 func varName(field string) string {
 	f, ok := reflect.TypeFor[Config]().FieldByName(field)
 	if !ok {

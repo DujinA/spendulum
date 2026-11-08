@@ -1,6 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Runs inside the Playwright container that e2e/compose.e2e.yaml starts beside the app.
 export default defineConfig({
   testDir: "./tests",
   globalSetup: "./global-setup.ts",

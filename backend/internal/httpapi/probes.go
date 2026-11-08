@@ -13,12 +13,10 @@ type probes struct {
 	logger *slog.Logger
 }
 
-// GetHealthz answers while the process serves requests; it never touches the database.
 func (probes) GetHealthz(context.Context, gen.GetHealthzRequestObject) (gen.GetHealthzResponseObject, error) {
 	return gen.GetHealthz200JSONResponse{Status: gen.Ok}, nil
 }
 
-// GetReadyz answers 200 only when a database ping succeeds.
 func (p probes) GetReadyz(ctx context.Context, _ gen.GetReadyzRequestObject) (gen.GetReadyzResponseObject, error) {
 	if err := p.db.Ping(ctx); err != nil {
 		p.logger.WarnContext(ctx, "readiness: database ping failed", slog.Any("error", err))

@@ -1,6 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# The one Spendulum image: the Go binary with the SPA embedded (ADR 0010).
 
 FROM node:26-alpine AS web
 WORKDIR /src
