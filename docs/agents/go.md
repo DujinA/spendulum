@@ -4,7 +4,7 @@ Read with ADR 0010 (backend packaged by feature) and ADR 0009 (user-scoped rows)
 
 ## Structure
 
-- One package per feature under `backend/internal/`: `entry/`, `vendor/`, `category/`, `budget/`, `report/`, `fx/`, `importing/`, `export/`, `auth/`, `settings/`. Use `entry/`, never `transaction/`: "Transaction" is an avoided term.
+- One package per feature under `backend/internal/`: `entry/`, `vendors/`, `category/`, `budget/`, `report/`, `fx/`, `importing/`, `export/`, `auth/`, `settings/`. Use `entry/`, never `transaction/`: "Transaction" is an avoided term. Use `vendors/`, never `vendor/`: the go command skips directories named `vendor` when it expands `./...`, so tests and lint would never see it.
 - Each feature package owns `domain.go` (types and rules), `service.go` (use cases), `postgres.go` and `http.go` (adapters), and their tests.
 - Interfaces are declared by the consumer that needs them. Unit tests use hand-written fakes.
 - `domain.go` and `service.go` never import `net/http`, pgx or the sqlc package. depguard fails the lint if they do.
