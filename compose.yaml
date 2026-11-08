@@ -1,0 +1,21 @@
+name: spendulum
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: spendulum
+      POSTGRES_PASSWORD: spendulum
+      POSTGRES_DB: spendulum
+    ports:
+      - "127.0.0.1:${SPENDULUM_DB_PORT:-5432}:5432"
+    volumes:
+      - db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spendulum -d spendulum"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  db:

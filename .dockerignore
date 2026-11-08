@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+!backend/internal/webui/dist
+.git
+.github
+.claude
+docs
+deploy
+e2e/test-results
+e2e/playwright-report
+backend/tools
+*.md
