@@ -5,12 +5,14 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Config is every setting the binary reads. Each field names its environment variable.
@@ -57,10 +59,12 @@ func (c Config) validate() error {
 	u, err := url.Parse(c.DatabaseURL)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
 		errs = append(errs, &VarError{Var: "SPENDULUM_DATABASE_URL", Reason: "must be a postgres:// URL with a host"})
+	} else if _, err := pgconn.ParseConfig(c.DatabaseURL); err != nil {
+		errs = append(errs, &VarError{Var: "SPENDULUM_DATABASE_URL", Reason: "is not a valid connection URL"})
 	}
 
-	if c.HTTPAddr == "" {
-		errs = append(errs, &VarError{Var: "SPENDULUM_HTTP_ADDR", Reason: "must not be empty"})
+	if _, _, err := net.SplitHostPort(c.HTTPAddr); err != nil {
+		errs = append(errs, &VarError{Var: "SPENDULUM_HTTP_ADDR", Reason: "must be host:port, for example :8080"})
 	}
 
 	for name, d := range map[string]time.Duration{

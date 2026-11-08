@@ -27,7 +27,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   workbox: {
     globPatterns: ["**/*.{js,css,html,svg,png}"],
     navigateFallback: "/index.html",
-    navigateFallbackDenylist: [/^\/api(\/|$)/, /^\/(healthz|readyz)$/],
+    navigateFallbackDenylist: [/^\/api(\/|\?|$)/, /^\/(healthz|readyz)(\?|$)/],
     cleanupOutdatedCaches: true,
   },
 };

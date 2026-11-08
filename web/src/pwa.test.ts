@@ -42,6 +42,8 @@ describe("PWA config", () => {
     expect(workbox.runtimeCaching).toBeUndefined();
     expect(denylist.some((re) => re.test("/api/entries"))).toBe(true);
     expect(denylist.some((re) => re.test("/api"))).toBe(true);
+    expect(denylist.some((re) => re.test("/api?page=2"))).toBe(true);
+    expect(denylist.some((re) => re.test("/healthz?probe=1"))).toBe(true);
     expect(denylist.some((re) => re.test("/entries"))).toBe(false);
   });
 });
