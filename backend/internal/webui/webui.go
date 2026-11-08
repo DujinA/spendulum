@@ -54,7 +54,7 @@ func Handler(spa fs.FS) http.Handler {
 		}
 
 		w.Header().Set("Cache-Control", "no-cache")
-		http.ServeFileFS(w, withPath(r, "/"), spa, "index.html")
+		http.ServeFileFS(w, withPath(r, "/index"), spa, "index.html")
 	})
 }
 
