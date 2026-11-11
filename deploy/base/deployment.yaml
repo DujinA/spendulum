@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spendulum
+spec:
+  replicas: 1
+  template:
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: spendulum
+          image: ghcr.io/dujina/spendulum
+          args: ["serve"]
+          env:
+            # Secret that CloudNativePG generates for the Cluster spendulum-db.
+            - name: SPENDULUM_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: spendulum-db-app
+                  key: uri
+          envFrom:
+            - configMapRef:
+                name: spendulum
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          # /healthz until the database exists; the CloudNativePG slice moves readiness to /readyz.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
