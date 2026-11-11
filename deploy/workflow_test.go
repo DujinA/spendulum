@@ -388,25 +388,44 @@ func (w workflow) filterMatches(t *testing.T, name string, files ...string) bool
 	return false
 }
 
-// Rollback is a revert of a deploy commit (#16); deploying again would rebuild master's source and undo it.
-func TestRevertOfADeployCommitDoesNotDeployAgain(t *testing.T) {
+// Only a change to what the Dockerfile ships deploys. A rollback (a revert of a deploy commit, #16)
+// must not deploy, or it would rebuild master's source and undo itself.
+func TestOnlyAChangeToTheShippedImageDeploys(t *testing.T) {
 	w := ciWorkflow(t)
-	revert := "deploy/overlays/prod/kustomization.yaml"
 
-	if got := w.job(t, "changes").Outputs["image-changed"]; got != "${{ steps.filter.outputs.image }}" {
-		t.Errorf("changes output image-changed = %q, want the unscoped image filter", got)
+	if got := w.job(t, "changes").Outputs["release"]; got != "${{ steps.filter.outputs.release }}" {
+		t.Errorf("changes output release = %q, want the unscoped release filter", got)
 	}
 
-	if w.filterMatches(t, "image", revert) {
-		t.Errorf("the image filter matches %s, so a revert would redeploy", revert)
+	if d := w.job(t, "deploy"); !strings.Contains(d.If, "needs.changes.outputs.release == 'true'") {
+		t.Errorf("deploy if = %q, want it to need a release change", d.If)
 	}
 
-	if !w.filterMatches(t, "image", "backend/internal/httpapi/probes.go") {
-		t.Error("the image filter does not match a backend change, so it would never deploy")
-	}
-
-	if d := w.job(t, "deploy"); !strings.Contains(d.If, "needs.changes.outputs.image-changed == 'true'") {
-		t.Errorf("deploy if = %q, want it to need an image change", d.If)
+	for file, want := range map[string]bool{
+		"backend/internal/httpapi/probes.go":      true,
+		"backend/cmd/spendulum/serve.go":          true,
+		"backend/migrations/00002_entries.sql":    true,
+		"backend/go.mod":                          true,
+		"backend/go.sum":                          true,
+		"web/src/main.tsx":                        true,
+		"pnpm-lock.yaml":                          true,
+		"package.json":                            true,
+		"pnpm-workspace.yaml":                     true,
+		"Dockerfile":                              true,
+		".dockerignore":                           true,
+		"deploy/overlays/prod/kustomization.yaml": false,
+		"backend/tools/go.mod":                    false,
+		"backend/tools/go.sum":                    false,
+		"backend/.golangci.yml":                   false,
+		".github/workflows/ci.yml":                false,
+		".github/actions/setup/action.yml":        false,
+		"e2e/tests/smoke.spec.ts":                 false,
+		"Taskfile.yml":                            false,
+		"README.md":                               false,
+	} {
+		if got := w.filterMatches(t, "release", file); got != want {
+			t.Errorf("a change to %s deploys = %v, want %v", file, got, want)
+		}
 	}
 }
 
