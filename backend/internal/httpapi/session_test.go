@@ -274,3 +274,33 @@ func TestLoginLogoutAndFailureLogsNeverContainTheEmailOrPassword(t *testing.T) {
 		t.Errorf("login and logout logged user ids %v, want one user_id on both", userIDs)
 	}
 }
+
+func TestMalformedLoginBodiesNeverPutCredentialsInLogsOrResponses(t *testing.T) {
+	a := newApp(t)
+	a.account(t)
+
+	for name, body := range map[string]string{
+		"numeric password":   `{"email":"ana@example.test","password":123456789012}`,
+		"numeric email":      `{"email":987654321098,"password":"correct horse battery"}`,
+		"object password":    `{"email":"ana@example.test","password":{"secret":"correct horse battery"}}`,
+		"array password":     `{"email":"ana@example.test","password":["correct horse battery"]}`,
+		"truncated password": `{"email":"ana@example.test","password":"correct horse batt`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := a.do(t, request{method: http.MethodPost, path: "/api/session", json: body})
+
+			assertStatus(t, res, http.StatusBadRequest)
+			assertProblem(t, res, http.StatusBadRequest)
+
+			for _, secret := range []string{"123456789012", "987654321098", "correct horse", "ana@example.test"} {
+				if strings.Contains(a.logs.String(), secret) {
+					t.Errorf("logs contain %q:\n%s", secret, a.logs.String())
+				}
+
+				if strings.Contains(string(res.body), secret) {
+					t.Errorf("response contains %q: %s", secret, res.body)
+				}
+			}
+		})
+	}
+}
