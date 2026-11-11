@@ -3,6 +3,7 @@
 
 FROM node:26-alpine AS web
 WORKDIR /src
+# renovate: datasource=npm depName=pnpm
 RUN npm install --global pnpm@10.34.9
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/

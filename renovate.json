@@ -7,8 +7,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Tool versions in the CI setup action, marked with a renovate comment.",
-      "managerFilePatterns": ["/^\\.github/actions/.+\\.ya?ml$/"],
+      "description": "Tool versions marked with a renovate comment, in the CI setup action and the Dockerfile.",
+      "managerFilePatterns": ["/^\\.github/actions/.+\\.ya?ml$/", "/^Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.*?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
@@ -74,6 +74,17 @@
     {
       "matchManagers": ["github-actions", "custom.regex"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "automerge": true
+    },
+    {
+      "description": "One PR for packageManager and the Dockerfile, so the image builds with the same pnpm.",
+      "matchPackageNames": ["pnpm"],
+      "groupName": "pnpm",
+      "automerge": false
+    },
+    {
+      "matchPackageNames": ["pnpm"],
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     }
   ]
