@@ -1,0 +1,18 @@
+# Applied once by hand at bootstrap; from then on it syncs deploy/argocd, itself included.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/DujinA/spendulum.git
+    targetRevision: master
+    path: deploy/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

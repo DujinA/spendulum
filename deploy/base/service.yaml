@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: spendulum
+spec:
+  type: NodePort
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      # Caddy on the host proxies to 127.0.0.1:30080 (ADR 0002).
+      nodePort: 30080

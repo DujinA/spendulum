@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: spendulum
+
+resources:
+  - ../../base
+
+# CI replaces the tag with `kustomize edit set image` on every merge to master.
+images:
+  - name: ghcr.io/dujina/spendulum
+    newTag: placeholder

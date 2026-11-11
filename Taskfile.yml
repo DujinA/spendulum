@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   GO_TOOL: go tool -modfile=tools/go.mod
+  GO_TOOL_FROM_DEPLOY: go tool -modfile=../backend/tools/go.mod
   IMAGE: spendulum:dev
 
 env:
@@ -36,19 +37,41 @@ tasks:
       - "{{.GO_TOOL}} sqlc generate"
 
   lint:
-    desc: golangci-lint, eslint and tsc
+    desc: golangci-lint, eslint, tsc and the deploy manifests
     deps: [install]
     cmds:
       - task: lint:go
       - pnpm --filter @spendulum/web lint
       - pnpm --filter @spendulum/web typecheck
       - pnpm --filter @spendulum/e2e typecheck
+      - task: manifests
 
   lint:go:
     internal: true
     dir: backend
     cmds:
       - "{{.GO_TOOL}} golangci-lint run ./..."
+
+  manifests:
+    desc: Build every overlay and deploy/argocd, validate them with kubeconform -strict, and run the manifest tests
+    dir: deploy
+    set: [errexit, pipefail]
+    vars:
+      KUBERNETES_VERSION: 1.36.0
+      # CRD schemas (Argo CD, CloudNativePG, Sealed Secrets, ...) pinned to one commit of the catalog.
+      CRD_SCHEMAS: https://raw.githubusercontent.com/datreeio/CRDs-catalog/89c736bdde38b5fecd0f8436ec5f3aa3679a3b86/{{"{{"}}.Group{{"}}"}}/{{"{{"}}.ResourceKind{{"}}"}}_{{"{{"}}.ResourceAPIVersion{{"}}"}}.json
+    cmds:
+      - |
+        for dir in overlays/*/ argocd/; do
+          echo "kubeconform $dir"
+          go tool kustomize build "$dir" |
+            go tool kubeconform -strict -summary \
+              -kubernetes-version {{.KUBERNETES_VERSION}} \
+              -schema-location default \
+              -schema-location '{{.CRD_SCHEMAS}}'
+        done
+      - "{{.GO_TOOL_FROM_DEPLOY}} golangci-lint run --config ../backend/.golangci.yml ./..."
+      - go test ./...
 
   test:
     desc: Go tests with the race detector (Docker runs PostgreSQL) and Vitest
