@@ -13,7 +13,7 @@ export function sessionQuery(api: ApiClient) {
       return data;
     },
     retry: false,
-    staleTime: Infinity,
+    staleTime: 60_000,
   });
 }
 
