@@ -14,7 +14,7 @@ type Repository interface {
 	UserByEmail(ctx context.Context, email string) (User, error)
 	UserEmail(ctx context.Context, userID uuid.UUID) (string, error)
 	SetPasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
-	CreateSession(ctx context.Context, s Session, tokenHash []byte) error
+	CreateSession(ctx context.Context, userID uuid.UUID, s Session, tokenHash []byte) error
 	SessionByTokenHash(ctx context.Context, tokenHash []byte, now time.Time) (Session, error)
 	RenewSession(ctx context.Context, userID, sessionID uuid.UUID, expiresAt time.Time) error
 	DeleteSession(ctx context.Context, userID, sessionID uuid.UUID) error
@@ -26,7 +26,6 @@ type PasswordHasher interface {
 	Verify(ctx context.Context, hash, password string) (bool, error)
 }
 
-// AccountDefaults creates the rows a new account starts with, such as settings and the Other categories.
 type AccountDefaults interface {
 	CreateDefaults(ctx context.Context, userID uuid.UUID) error
 }
@@ -45,7 +44,7 @@ type Deps struct {
 }
 
 type Service struct {
-	Deps
+	d Deps
 }
 
 func NewService(d Deps) *Service {
@@ -53,26 +52,26 @@ func NewService(d Deps) *Service {
 		d.Now = time.Now
 	}
 
-	return &Service{Deps: d}
+	return &Service{d: d}
 }
 
-type Login struct {
+type StartedSession struct {
 	Token   string
 	Session Session
 }
 
-// CreateAccount is the create-account operation: the user, their default settings and the Other categories.
+// CreateAccount creates the user, their default settings and the Other categories in one transaction.
 func (s *Service) CreateAccount(ctx context.Context, email, password string) (uuid.UUID, error) {
-	email, err := NormalizeEmail(email)
+	email, err := normalizeEmail(email)
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	if err := CheckPassword(password); err != nil {
+	if err := checkPassword(password); err != nil {
 		return uuid.Nil, err
 	}
 
-	hash, err := s.Hasher.Hash(ctx, password)
+	hash, err := s.d.Hasher.Hash(ctx, password)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("auth: hash password: %w", err)
 	}
@@ -82,12 +81,12 @@ func (s *Service) CreateAccount(ctx context.Context, email, password string) (uu
 		return uuid.Nil, fmt.Errorf("auth: new id: %w", err)
 	}
 
-	err = s.Tx.InTx(ctx, func(ctx context.Context) error {
-		if err := s.Repo.CreateUser(ctx, User{ID: id, Email: email, PasswordHash: hash}); err != nil {
+	err = s.d.Tx.InTx(ctx, func(ctx context.Context) error {
+		if err := s.d.Repo.CreateUser(ctx, User{ID: id, Email: email, PasswordHash: hash}); err != nil {
 			return err //nolint:wrapcheck // ErrEmailTaken must reach the caller as is
 		}
 
-		for _, d := range s.Defaults {
+		for _, d := range s.d.Defaults {
 			if err := d.CreateDefaults(ctx, id); err != nil {
 				return err //nolint:wrapcheck // each feature names itself in its error
 			}
@@ -102,33 +101,32 @@ func (s *Service) CreateAccount(ctx context.Context, email, password string) (uu
 	return id, nil
 }
 
-// ResetPassword sets a new password and revokes every session of the user.
 func (s *Service) ResetPassword(ctx context.Context, email, password string) (uuid.UUID, error) {
-	email, err := NormalizeEmail(email)
+	email, err := normalizeEmail(email)
 	if err != nil {
 		return uuid.Nil, ErrUserNotFound
 	}
 
-	if err := CheckPassword(password); err != nil {
+	if err := checkPassword(password); err != nil {
 		return uuid.Nil, err
 	}
 
-	user, err := s.Repo.UserByEmail(ctx, email)
+	user, err := s.d.Repo.UserByEmail(ctx, email)
 	if err != nil {
 		return uuid.Nil, err //nolint:wrapcheck // ErrUserNotFound must reach the caller as is
 	}
 
-	hash, err := s.Hasher.Hash(ctx, password)
+	hash, err := s.d.Hasher.Hash(ctx, password)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("auth: hash password: %w", err)
 	}
 
-	err = s.Tx.InTx(ctx, func(ctx context.Context) error {
-		if err := s.Repo.SetPasswordHash(ctx, user.ID, hash); err != nil {
+	err = s.d.Tx.InTx(ctx, func(ctx context.Context) error {
+		if err := s.d.Repo.SetPasswordHash(ctx, user.ID, hash); err != nil {
 			return err //nolint:wrapcheck // wrapped below
 		}
 
-		return s.Repo.DeleteUserSessions(ctx, user.ID)
+		return s.d.Repo.DeleteUserSessions(ctx, user.ID)
 	})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("auth: reset password: %w", err)
@@ -137,79 +135,65 @@ func (s *Service) ResetPassword(ctx context.Context, email, password string) (uu
 	return user.ID, nil
 }
 
-// Login answers ErrInvalidCredentials for a wrong password and an unknown email alike,
-// and hashes once in both cases, so neither the answer nor its timing tells them apart.
-func (s *Service) Login(ctx context.Context, email, password, ip string) (Login, error) {
-	now := s.Now()
-	normalized, emailErr := NormalizeEmail(email)
+// A wrong password and an unknown email both hash once and answer ErrInvalidCredentials, so neither tells them apart.
+func (s *Service) Login(ctx context.Context, email, password, ip string) (StartedSession, error) {
+	now := s.d.Now()
+	user := User{PasswordHash: dummyHash}
+
+	normalized, emailErr := normalizeEmail(email)
+	if emailErr != nil {
+		normalized = email
+	}
 
 	key := normalized + "\x00" + ip
-	if emailErr != nil {
-		key = email + "\x00" + ip
+	if wait := s.d.Limiter.Attempt(key, now); wait > 0 {
+		return StartedSession{}, &TooManyAttemptsError{RetryAfter: wait}
 	}
 
-	if wait := s.Limiter.RetryAfter(key, now); wait > 0 {
-		return Login{}, &TooManyAttemptsError{RetryAfter: wait}
+	if emailErr == nil {
+		found, err := s.d.Repo.UserByEmail(ctx, normalized)
+
+		switch {
+		case err == nil:
+			user = found
+		case !errors.Is(err, ErrUserNotFound):
+			return StartedSession{}, fmt.Errorf("auth: find user: %w", err)
+		}
 	}
 
-	user, err := s.findUser(ctx, normalized, emailErr == nil)
+	ok, err := s.d.Hasher.Verify(ctx, user.PasswordHash, password)
 	if err != nil {
-		return Login{}, err
-	}
-
-	ok, err := s.Hasher.Verify(ctx, user.PasswordHash, password)
-	if err != nil {
-		return Login{}, fmt.Errorf("auth: verify password: %w", err)
+		return StartedSession{}, fmt.Errorf("auth: verify password: %w", err)
 	}
 
 	if !ok || user.ID == uuid.Nil {
-		s.Limiter.Fail(key, now)
-
-		return Login{}, ErrInvalidCredentials
+		return StartedSession{}, ErrInvalidCredentials
 	}
 
-	s.Limiter.Reset(key)
+	s.d.Limiter.Reset(key)
 
 	id, err := uuid.NewV7()
 	if err != nil {
-		return Login{}, fmt.Errorf("auth: new id: %w", err)
+		return StartedSession{}, fmt.Errorf("auth: new id: %w", err)
 	}
 
-	login := Login{Token: newToken(), Session: Session{ID: id, UserID: user.ID, ExpiresAt: now.Add(SessionLifetime)}}
-	if err := s.Repo.CreateSession(ctx, login.Session, HashToken(login.Token)); err != nil {
-		return Login{}, fmt.Errorf("auth: create session: %w", err)
+	started := StartedSession{Token: newToken(), Session: Session{ID: id, UserID: user.ID, ExpiresAt: now.Add(SessionLifetime)}}
+	if err := s.d.Repo.CreateSession(ctx, user.ID, started.Session, hashToken(started.Token)); err != nil {
+		return StartedSession{}, fmt.Errorf("auth: create session: %w", err)
 	}
 
-	return login, nil
+	return started, nil
 }
 
-// An unknown user comes back with the dummy hash, so Login still runs one argon2id hash.
-func (s *Service) findUser(ctx context.Context, email string, valid bool) (User, error) {
-	if !valid {
-		return User{PasswordHash: dummyHash}, nil
-	}
-
-	user, err := s.Repo.UserByEmail(ctx, email)
-
-	switch {
-	case errors.Is(err, ErrUserNotFound):
-		return User{PasswordHash: dummyHash}, nil
-	case err != nil:
-		return User{}, fmt.Errorf("auth: find user: %w", err)
-	}
-
-	return user, nil
-}
-
-// Authenticate finds the session of a token and renews it once it is older than 15 days.
+// Authenticate also renews a session once it is older than 15 days, and reports whether it did.
 func (s *Service) Authenticate(ctx context.Context, token string) (Session, bool, error) {
 	if token == "" {
 		return Session{}, false, ErrNoSession
 	}
 
-	now := s.Now()
+	now := s.d.Now()
 
-	session, err := s.Repo.SessionByTokenHash(ctx, HashToken(token), now)
+	session, err := s.d.Repo.SessionByTokenHash(ctx, hashToken(token), now)
 	if err != nil {
 		return Session{}, false, err //nolint:wrapcheck // ErrNoSession must reach the caller as is
 	}
@@ -219,7 +203,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, bool
 	}
 
 	session.ExpiresAt = now.Add(SessionLifetime)
-	if err := s.Repo.RenewSession(ctx, session.UserID, session.ID, session.ExpiresAt); err != nil {
+	if err := s.d.Repo.RenewSession(ctx, session.UserID, session.ID, session.ExpiresAt); err != nil {
 		return Session{}, false, fmt.Errorf("auth: renew session: %w", err)
 	}
 
@@ -227,7 +211,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, bool
 }
 
 func (s *Service) Logout(ctx context.Context, session Session) error {
-	if err := s.Repo.DeleteSession(ctx, session.UserID, session.ID); err != nil {
+	if err := s.d.Repo.DeleteSession(ctx, session.UserID, session.ID); err != nil {
 		return fmt.Errorf("auth: delete session: %w", err)
 	}
 
@@ -235,5 +219,5 @@ func (s *Service) Logout(ctx context.Context, session Session) error {
 }
 
 func (s *Service) Email(ctx context.Context, userID uuid.UUID) (string, error) {
-	return s.Repo.UserEmail(ctx, userID) //nolint:wrapcheck // the repository already says what failed
+	return s.d.Repo.UserEmail(ctx, userID) //nolint:wrapcheck // the repository already says what failed
 }

@@ -12,7 +12,6 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// AC 12 of issue 28: argon2id with m=64 MiB, t=3, p=4.
 const (
 	argonMemoryKiB = 64 * 1024
 	argonTime      = 3

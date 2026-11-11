@@ -54,6 +54,20 @@ func noStoreOutsideSPA(next http.Handler) http.Handler {
 	})
 }
 
+func onAPI(middleware func(http.Handler) http.Handler, next http.Handler) http.Handler {
+	api := middleware(next)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAPI(r.URL.Path) {
+			api.ServeHTTP(w, r)
+
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func isAPI(path string) bool {
 	return path == "/api" || strings.HasPrefix(path, "/api/")
 }

@@ -48,7 +48,7 @@ func TestSessionIsFoundByTokenHashUntilItExpires(t *testing.T) {
 	_ = repo.CreateUser(t.Context(), u)
 
 	s := auth.Session{ID: uuid.Must(uuid.NewV7()), UserID: u.ID, ExpiresAt: t0().Add(time.Hour)}
-	if err := repo.CreateSession(t.Context(), s, []byte("hash")); err != nil {
+	if err := repo.CreateSession(t.Context(), u.ID, s, []byte("hash")); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestOneUserNeverRenewsOrDeletesAnotherUsersSessions(t *testing.T) {
 	_ = repo.CreateUser(t.Context(), b)
 
 	aSession := auth.Session{ID: uuid.Must(uuid.NewV7()), UserID: a.ID, ExpiresAt: t0().Add(time.Hour)}
-	if err := repo.CreateSession(t.Context(), aSession, []byte("a")); err != nil {
+	if err := repo.CreateSession(t.Context(), a.ID, aSession, []byte("a")); err != nil {
 		t.Fatal(err)
 	}
 

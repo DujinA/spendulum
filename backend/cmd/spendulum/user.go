@@ -11,8 +11,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/uuid"
 	"golang.org/x/term"
 
+	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 )
 
@@ -24,30 +26,34 @@ var (
 	errPasswordNotTyped = errors.New("read password: nothing was typed")
 )
 
+type userCommand struct {
+	flag string
+	run  func(svc *auth.Service, ctx context.Context, email, password string) (uuid.UUID, error)
+}
+
+func userCommands() map[string]userCommand {
+	return map[string]userCommand{
+		"create":         {flag: "email", run: (*auth.Service).CreateAccount},
+		"reset-password": {flag: "user", run: (*auth.Service).ResetPassword},
+	}
+}
+
 // The password is typed at the prompt, never passed as a flag, so it stays out of shell history.
 func user(ctx context.Context, inv invocation) error {
 	if len(inv.args) == 0 {
 		return errUserUsage
 	}
 
-	sub, args := inv.args[0], inv.args[1:]
-
-	var flagName string
-
-	switch sub {
-	case "create":
-		flagName = "email"
-	case "reset-password":
-		flagName = "user"
-	default:
+	cmd, ok := userCommands()[inv.args[0]]
+	if !ok {
 		return errUserUsage
 	}
 
-	fs := flag.NewFlagSet("user "+sub, flag.ContinueOnError)
+	fs := flag.NewFlagSet("user "+inv.args[0], flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	email := fs.String(flagName, "", "the user's email")
+	email := fs.String(cmd.flag, "", "the user's email")
 
-	if err := fs.Parse(args); err != nil || *email == "" || fs.NArg() != 0 {
+	if err := fs.Parse(inv.args[1:]); err != nil || *email == "" || fs.NArg() != 0 {
 		return errUserUsage
 	}
 
@@ -62,25 +68,12 @@ func user(ctx context.Context, inv invocation) error {
 	}
 	defer d.Close()
 
-	svc := newAuthService(d)
-
-	if sub == "create" {
-		id, err := svc.CreateAccount(ctx, *email, password)
-		if err != nil {
-			return fmt.Errorf("user create: %w", err)
-		}
-
-		inv.logger.InfoContext(ctx, "account created", slog.String("user_id", id.String()))
-
-		return nil
-	}
-
-	id, err := svc.ResetPassword(ctx, *email, password)
+	id, err := cmd.run(newAuthService(d), ctx, *email, password)
 	if err != nil {
-		return fmt.Errorf("user reset-password: %w", err)
+		return fmt.Errorf("user %s: %w", inv.args[0], err)
 	}
 
-	inv.logger.InfoContext(ctx, "password reset; every session revoked", slog.String("user_id", id.String()))
+	inv.logger.InfoContext(ctx, "user command succeeded", slog.String("command", inv.args[0]), slog.String("user_id", id.String()))
 
 	return nil
 }
@@ -120,10 +113,11 @@ func (p prompt) passwordTwice() (string, error) {
 func (p prompt) password(label string) (string, error) {
 	_, _ = fmt.Fprint(p.out, label)
 
+	// Neither a terminal without echo nor piped input ends the prompt's line.
+	defer func() { _, _ = fmt.Fprintln(p.out) }()
+
 	if p.terminal != nil {
 		b, err := term.ReadPassword(int(p.terminal.Fd()))
-		_, _ = fmt.Fprintln(p.out)
-
 		if err != nil {
 			return "", fmt.Errorf("read password: %w", err)
 		}

@@ -49,7 +49,7 @@ func NewHandler(d Deps) http.Handler {
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", d.WebUI)
 
-	return logRequests(d.Logger, noStoreOutsideSPA(rejectCrossOrigin(requireJSON(d.Auth.RequireSession(mux)))))
+	return logRequests(d.Logger, noStoreOutsideSPA(rejectCrossOrigin(requireJSON(onAPI(d.Auth.RequireSession, mux)))))
 }
 
 func notFound(w http.ResponseWriter, _ *http.Request) {

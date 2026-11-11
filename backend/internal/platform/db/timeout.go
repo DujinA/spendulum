@@ -10,15 +10,15 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/db/gen"
 )
 
-// timeoutDBTX gives each call its own deadline and runs it in the transaction InTx
-// put in ctx, if any. The deadline must outlive the call for Query and QueryRow,
-// because rows are read after they return, so their cancel runs when the rows are
-// closed or the row is scanned.
+// timeoutDBTX gives each call its own deadline. The deadline must outlive the call
+// for Query and QueryRow, because rows are read after they return, so their cancel
+// runs when the rows are closed or the row is scanned.
 type timeoutDBTX struct {
 	db      gen.DBTX
 	timeout time.Duration
 }
 
+// A call inside InTx runs in its transaction.
 func (t timeoutDBTX) conn(ctx context.Context) gen.DBTX {
 	if tx, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
 		return tx

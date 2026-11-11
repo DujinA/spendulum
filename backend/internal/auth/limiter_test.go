@@ -1,6 +1,8 @@
 package auth_test
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -9,37 +11,35 @@ import (
 
 func t0() time.Time { return time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC) }
 
-func TestLimiterBlocksAfterFiveFailuresWithin15Minutes(t *testing.T) {
+func TestLimiterRefusesTheSixthAttemptWithin15Minutes(t *testing.T) {
 	l := auth.NewLimiter()
 
 	for i := range 5 {
-		if wait := l.RetryAfter("k", t0().Add(time.Duration(i)*time.Minute)); wait != 0 {
-			t.Fatalf("attempt %d blocked for %s, want allowed", i+1, wait)
+		if wait := l.Attempt("k", t0().Add(time.Duration(i)*time.Minute)); wait != 0 {
+			t.Fatalf("attempt %d refused for %s, want allowed", i+1, wait)
 		}
-
-		l.Fail("k", t0().Add(time.Duration(i)*time.Minute))
 	}
 
-	// The oldest failure, at t0(), leaves the window at t0()+15m.
-	if wait := l.RetryAfter("k", t0().Add(5*time.Minute)); wait != 10*time.Minute {
-		t.Errorf("6th attempt: RetryAfter = %s, want 10m", wait)
+	// The oldest attempt, at t0, leaves the window at t0+15m.
+	if wait := l.Attempt("k", t0().Add(5*time.Minute)); wait != 10*time.Minute {
+		t.Errorf("6th attempt: wait = %s, want 10m", wait)
 	}
 
-	if wait := l.RetryAfter("k", t0().Add(15*time.Minute)); wait != 0 {
-		t.Errorf("after the oldest failure left the window: RetryAfter = %s, want 0", wait)
+	if wait := l.Attempt("k", t0().Add(15*time.Minute)); wait != 0 {
+		t.Errorf("after the oldest attempt left the window: wait = %s, want 0", wait)
 	}
 }
 
-func TestLimiterIgnoresFailuresOlderThan15Minutes(t *testing.T) {
+func TestLimiterForgetsAttemptsOlderThan15Minutes(t *testing.T) {
 	l := auth.NewLimiter()
 
 	for i := range 5 {
-		l.Fail("k", t0().Add(time.Duration(i)*4*time.Minute))
+		l.Attempt("k", t0().Add(time.Duration(i)*4*time.Minute))
 	}
 
-	// At t0()+16m the failure at t0() is outside the window: 4 remain.
-	if wait := l.RetryAfter("k", t0().Add(16*time.Minute)); wait != 0 {
-		t.Errorf("RetryAfter = %s, want 0", wait)
+	// At t0+16m the attempt at t0 is outside the window: 4 remain.
+	if wait := l.Attempt("k", t0().Add(16*time.Minute)); wait != 0 {
+		t.Errorf("wait = %s, want 0", wait)
 	}
 }
 
@@ -47,21 +47,44 @@ func TestLimiterKeysAreIndependentAndResetClearsOne(t *testing.T) {
 	l := auth.NewLimiter()
 
 	for range 5 {
-		l.Fail("a", t0())
-		l.Fail("b", t0())
+		l.Attempt("a", t0())
+		l.Attempt("b", t0())
 	}
 
-	if wait := l.RetryAfter("c", t0()); wait != 0 {
-		t.Errorf("an untouched key is blocked for %s", wait)
+	if wait := l.Attempt("c", t0()); wait != 0 {
+		t.Errorf("an untouched key waits %s", wait)
 	}
 
 	l.Reset("a")
 
-	if wait := l.RetryAfter("a", t0()); wait != 0 {
-		t.Errorf("a reset key is blocked for %s", wait)
+	if wait := l.Attempt("a", t0()); wait != 0 {
+		t.Errorf("a reset key waits %s", wait)
 	}
 
-	if wait := l.RetryAfter("b", t0()); wait == 0 {
-		t.Error("resetting one key unblocked another")
+	if wait := l.Attempt("b", t0()); wait == 0 {
+		t.Error("resetting one key allowed another")
+	}
+}
+
+func TestLimiterAllowsOnlyFiveOfManyConcurrentAttempts(t *testing.T) {
+	l := auth.NewLimiter()
+
+	var (
+		allowed atomic.Int32
+		wg      sync.WaitGroup
+	)
+
+	for range 50 {
+		wg.Go(func() {
+			if l.Attempt("k", t0()) == 0 {
+				allowed.Add(1)
+			}
+		})
+	}
+
+	wg.Wait()
+
+	if got := allowed.Load(); got != 5 {
+		t.Errorf("%d of 50 concurrent attempts allowed, want 5", got)
 	}
 }

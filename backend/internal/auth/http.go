@@ -84,16 +84,9 @@ func (h Handler) DeleteSession(ctx context.Context, _ gen.DeleteSessionRequestOb
 	}, nil
 }
 
-// RequireSession answers 401 to every /api request without a valid session, except logging in.
-// It puts the session and the client IP in the request context.
+// RequireSession answers 401 without a valid session, except to logging in, and puts the session and client IP in ctx.
 func (h Handler) RequireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api" && !strings.HasPrefix(r.URL.Path, "/api/") {
-			next.ServeHTTP(w, r)
-
-			return
-		}
-
 		ctx := context.WithValue(r.Context(), clientIPKey{}, h.clientIP(r))
 
 		if r.Method == http.MethodPost && r.URL.Path == "/api/session" {
@@ -129,7 +122,7 @@ func (h Handler) RequireSession(next http.Handler) http.Handler {
 	})
 }
 
-// A negative maxAge clears the cookie. Max-Age is always explicit: iOS home-screen apps drop session cookies.
+// Max-Age is always explicit, because iOS home-screen apps drop session cookies; a negative one clears it.
 func (h Handler) cookie(token string, maxAge int) *http.Cookie {
 	return &http.Cookie{ //nolint:gosec // Secure is off only by configuration, for plain-HTTP test hosts
 		Name:     CookieName,

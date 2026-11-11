@@ -17,12 +17,12 @@ import (
 const (
 	SessionLifetime   = 30 * 24 * time.Hour
 	sessionRenewAfter = 15 * 24 * time.Hour
-	MinPasswordLength = 12
+	minPasswordLength = 12
 )
 
 var (
 	ErrInvalidEmail       = errors.New("the email is not a valid address")
-	ErrPasswordTooShort   = fmt.Errorf("the password must be at least %d characters", MinPasswordLength)
+	ErrPasswordTooShort   = fmt.Errorf("the password must be at least %d characters", minPasswordLength)
 	ErrEmailTaken         = errors.New("a user with this email already exists")
 	ErrUserNotFound       = errors.New("no user has this email")
 	ErrInvalidCredentials = errors.New("email or password is incorrect")
@@ -54,8 +54,7 @@ func (s Session) dueForRenewal(now time.Time) bool {
 	return s.ExpiresAt.Sub(now) < SessionLifetime-sessionRenewAfter
 }
 
-// Emails are unique after lowercasing (ADR 0009).
-func NormalizeEmail(raw string) (string, error) {
+func normalizeEmail(raw string) (string, error) {
 	email := strings.ToLower(strings.TrimSpace(raw))
 
 	addr, err := mail.ParseAddress(email)
@@ -66,8 +65,8 @@ func NormalizeEmail(raw string) (string, error) {
 	return email, nil
 }
 
-func CheckPassword(password string) error {
-	if utf8.RuneCountInString(password) < MinPasswordLength {
+func checkPassword(password string) error {
+	if utf8.RuneCountInString(password) < minPasswordLength {
 		return ErrPasswordTooShort
 	}
 
@@ -79,7 +78,7 @@ func newToken() string {
 	return rand.Text()
 }
 
-func HashToken(token string) []byte {
+func hashToken(token string) []byte {
 	sum := sha256.Sum256([]byte(token))
 
 	return sum[:]

@@ -137,7 +137,7 @@ func TestUserResetPasswordChangesThePasswordAndRevokesEverySession(t *testing.T)
 		t.Fatalf("user reset-password exited %d:\n%s", code, out)
 	}
 
-	for _, l := range []auth.Login{phone, desktop} {
+	for _, l := range []auth.StartedSession{phone, desktop} {
 		if _, _, err := svc.Authenticate(t.Context(), l.Token); !errors.Is(err, auth.ErrNoSession) {
 			t.Errorf("session after reset: %v, want ErrNoSession", err)
 		}

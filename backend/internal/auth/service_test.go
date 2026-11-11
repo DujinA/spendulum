@@ -102,6 +102,10 @@ func TestLoginStartsA30DaySessionForAnyLetterCaseOfTheEmail(t *testing.T) {
 		t.Errorf("session = %+v, want user %s expiring 30 days from now", login.Session, id)
 	}
 
+	if login.Session.ID.Version() != 7 {
+		t.Errorf("session id version = %d, want UUIDv7", login.Session.ID.Version())
+	}
+
 	got, renewed, err := f.svc.Authenticate(t.Context(), login.Token)
 	if err != nil || renewed || got != login.Session {
 		t.Errorf("Authenticate = %+v, %v, %v; want the new session, not renewed", got, renewed, err)
@@ -156,8 +160,10 @@ func TestSessionIsRenewedTo30DaysFromNowOnlyOnceOlderThan15Days(t *testing.T) {
 		t.Fatalf("Authenticate = %+v, %v, %v; want renewed to 30 days from now", s, renewed, err)
 	}
 
-	if f.repo.sessions[string(hashOf(login.Token))].ExpiresAt != s.ExpiresAt {
-		t.Error("the renewed expiry was not stored")
+	for _, stored := range f.repo.sessions {
+		if stored.ID == s.ID && !stored.ExpiresAt.Equal(s.ExpiresAt) {
+			t.Errorf("stored expiry = %s, want the renewed %s", stored.ExpiresAt, s.ExpiresAt)
+		}
 	}
 }
 
@@ -264,10 +270,6 @@ func (f *fixture) account(t *testing.T) uuid.UUID {
 	return id
 }
 
-func hashOf(token string) []byte {
-	return auth.HashToken(token)
-}
-
 type fakeTx struct{}
 
 func (fakeTx) InTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
@@ -355,10 +357,11 @@ func (r *fakeRepo) SetPasswordHash(_ context.Context, userID uuid.UUID, hash str
 	return auth.ErrUserNotFound
 }
 
-func (r *fakeRepo) CreateSession(_ context.Context, s auth.Session, tokenHash []byte) error {
+func (r *fakeRepo) CreateSession(_ context.Context, userID uuid.UUID, s auth.Session, tokenHash []byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	s.UserID = userID
 	r.sessions[string(tokenHash)] = s
 
 	return nil

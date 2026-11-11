@@ -12,10 +12,10 @@ export const server = setupServer();
 export const testEmail = "ana@example.test";
 export const testPassword = "correct horse battery";
 
-function problem(status: number, title: string, detail: string) {
+function problem(status: number, title: string, detail: string, headers: Record<string, string> = {}) {
   return HttpResponse.json<Problem>(
     { type: "about:blank", status, title, detail },
-    { status, headers: { "Content-Type": "application/problem+json" } },
+    { status, headers: { "Content-Type": "application/problem+json", ...headers } },
   );
 }
 
@@ -51,13 +51,9 @@ export function fakeSessionApi({ loggedIn }: { loggedIn: boolean }) {
 export function tooManyLogins(retryAfterSeconds: number) {
   server.use(
     http.post("*/api/session", () =>
-      HttpResponse.json<Problem>(
-        { type: "about:blank", status: 429, title: "Too Many Requests", detail: "Too many failed logins. Try again later." },
-        {
-          status: 429,
-          headers: { "Content-Type": "application/problem+json", "Retry-After": String(retryAfterSeconds) },
-        },
-      ),
+      problem(429, "Too Many Requests", "Too many failed logins. Try again later.", {
+        "Retry-After": String(retryAfterSeconds),
+      }),
     ),
   );
 }

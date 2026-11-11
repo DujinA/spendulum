@@ -34,7 +34,3 @@ func (s *Service) CreateDefaults(ctx context.Context, userID uuid.UUID) error {
 
 	return nil
 }
-
-func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]Category, error) {
-	return s.repo.List(ctx, userID) //nolint:wrapcheck // the repository already says what failed
-}

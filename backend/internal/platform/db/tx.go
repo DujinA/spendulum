@@ -10,8 +10,7 @@ import (
 
 type txKey struct{}
 
-// InTx runs fn in one transaction: every query made with ctx inside fn, through any
-// adapter built on Queries, joins it (ADR 0010). A nested InTx joins the outer one.
+// Every query made with fn's ctx, through any adapter, joins the transaction, as does a nested InTx (ADR 0010).
 func (d *DB) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	if _, ok := ctx.Value(txKey{}).(pgx.Tx); ok {
 		return fn(ctx)
