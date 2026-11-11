@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -21,6 +22,10 @@ type renovateConfig struct {
 	Schedule     []string            `json:"schedule"`
 	PackageRules []renovateRule      `json:"packageRules"`
 	ArgoCD       map[string][]string `json:"argocd"`
+	Custom       []struct {
+		FilePatterns []string `json:"managerFilePatterns"`
+		MatchStrings []string `json:"matchStrings"`
+	} `json:"customManagers"`
 }
 
 type renovateUpdate struct {
@@ -129,5 +134,69 @@ func TestRenovateReadsHelmChartsFromTheArgoCDApplications(t *testing.T) {
 	patterns := c.ArgoCD["managerFilePatterns"]
 	if len(patterns) != 1 || !strings.Contains(patterns[0], "deploy/argocd/") {
 		t.Errorf("argocd.managerFilePatterns = %v, want deploy/argocd/", patterns)
+	}
+}
+
+// customDeps applies the custom regex managers to a file, as Renovate does, and returns depName → currentValue.
+func (c renovateConfig) customDeps(t *testing.T, file string) map[string]string {
+	t.Helper()
+
+	deps := map[string]string{}
+	content := readFile(t, "../"+file)
+
+	for _, m := range c.Custom {
+		applies := false
+
+		for _, p := range m.FilePatterns {
+			applies = applies || regexp.MustCompile(strings.Trim(p, "/")).MatchString(file)
+		}
+
+		if !applies {
+			continue
+		}
+
+		for _, ms := range m.MatchStrings {
+			re := regexp.MustCompile(ms)
+			for _, match := range re.FindAllStringSubmatch(content, -1) {
+				deps[match[re.SubexpIndex("depName")]] = match[re.SubexpIndex("currentValue")]
+			}
+		}
+	}
+
+	return deps
+}
+
+func TestRenovateUpdatesThePnpmInTheDockerfile(t *testing.T) {
+	var pkg struct {
+		PackageManager string `json:"packageManager"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, "../package.json")), &pkg); err != nil {
+		t.Fatal(err)
+	}
+
+	want, ok := strings.CutPrefix(pkg.PackageManager, "pnpm@")
+	if !ok {
+		t.Fatalf("packageManager = %q, want pnpm@<version>", pkg.PackageManager)
+	}
+
+	if got := renovate(t).customDeps(t, "Dockerfile")["pnpm"]; got != want {
+		t.Errorf("Renovate reads pnpm %q from the Dockerfile, want %q to match packageManager", got, want)
+	}
+}
+
+func TestRenovateUpdatesBothPnpmPinsInOnePR(t *testing.T) {
+	c := renovate(t)
+	packageManager := renovateUpdate{"npm", "packageManager", "minor", "package.json", "pnpm"}
+	dockerfile := renovateUpdate{"custom.regex", "", "minor", "Dockerfile", "pnpm"}
+
+	for _, u := range []renovateUpdate{packageManager, dockerfile} {
+		if group, automerge := c.resolve(u); group != "pnpm" || !automerge {
+			t.Errorf("%s in %s minor: group %q, automerge %v; want pnpm, true", u.manager, u.file, group, automerge)
+		}
+
+		u.updateType = "major"
+		if group, automerge := c.resolve(u); group != "pnpm" || automerge {
+			t.Errorf("%s in %s major: group %q, automerge %v; want pnpm, false", u.manager, u.file, group, automerge)
+		}
 	}
 }
