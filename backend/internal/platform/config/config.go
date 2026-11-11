@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"reflect"
 	"strings"
@@ -20,6 +21,10 @@ type Config struct {
 	MigrateTimeout  time.Duration `env:"SPENDULUM_MIGRATE_TIMEOUT"                envDefault:"5m"`
 	ShutdownTimeout time.Duration `env:"SPENDULUM_SHUTDOWN_TIMEOUT"               envDefault:"20s"`
 	LogLevel        string        `env:"SPENDULUM_LOG_LEVEL"                      envDefault:"info"`
+	// Off only where the app is served over plain HTTP to a host other than localhost, such as the e2e compose.
+	CookieSecure bool `env:"SPENDULUM_COOKIE_SECURE" envDefault:"true"`
+	// Peers whose X-Forwarded-For names the client IP (ADR 0002: only Caddy).
+	TrustedProxies []netip.Prefix `env:"SPENDULUM_TRUSTED_PROXIES"`
 }
 
 type VarError struct {

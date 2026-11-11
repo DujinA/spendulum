@@ -2,6 +2,8 @@ package config_test
 
 import (
 	"errors"
+	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -26,8 +28,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		MigrateTimeout:  5 * time.Minute,
 		ShutdownTimeout: 20 * time.Second,
 		LogLevel:        "info",
+		CookieSecure:    true,
 	}
-	if cfg != want {
+	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
 	}
 }
@@ -69,6 +72,16 @@ func TestLoadNamesTheBadVariable(t *testing.T) {
 			wantVar: "SPENDULUM_HTTP_ADDR",
 		},
 		{
+			name:    "trusted proxy that is not a CIDR",
+			env:     with(validEnv(), "SPENDULUM_TRUSTED_PROXIES", "10.42.0.0/16,caddy"),
+			wantVar: "SPENDULUM_TRUSTED_PROXIES",
+		},
+		{
+			name:    "cookie flag that is not a boolean",
+			env:     with(validEnv(), "SPENDULUM_COOKIE_SECURE", "sometimes"),
+			wantVar: "SPENDULUM_COOKIE_SECURE",
+		},
+		{
 			name:    "unparsable duration",
 			env:     with(validEnv(), "SPENDULUM_DB_TIMEOUT", "soon"),
 			wantVar: "SPENDULUM_DB_TIMEOUT",
@@ -108,4 +121,18 @@ func with(env map[string]string, key, value string) map[string]string {
 	env[key] = value
 
 	return env
+}
+
+func TestLoadParsesTrustedProxiesAndTheCookieFlag(t *testing.T) {
+	env := with(with(validEnv(), "SPENDULUM_TRUSTED_PROXIES", "10.42.0.0/16,127.0.0.1/32"), "SPENDULUM_COOKIE_SECURE", "false")
+
+	cfg, err := config.Load(env)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16"), netip.MustParsePrefix("127.0.0.1/32")}
+	if !reflect.DeepEqual(cfg.TrustedProxies, want) || cfg.CookieSecure {
+		t.Errorf("TrustedProxies = %v, CookieSecure = %v; want %v, false", cfg.TrustedProxies, cfg.CookieSecure, want)
+	}
 }

@@ -14,22 +14,31 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/logging"
 )
 
-const usage = "usage: spendulum <serve|migrate>"
+const usage = "usage: spendulum <serve|migrate|user>"
 
-type command func(ctx context.Context, cfg config.Config, logger *slog.Logger) error
+type invocation struct {
+	cfg    config.Config
+	logger *slog.Logger
+	args   []string
+	in     io.Reader
+	out    io.Writer
+}
+
+type command func(ctx context.Context, inv invocation) error
 
 func commands() map[string]command {
 	return map[string]command{
 		"serve":   serve,
 		"migrate": migrate,
+		"user":    user,
 	}
 }
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], environ(), os.Stdout))
+	os.Exit(run(context.Background(), os.Args[1:], environ(), os.Stdin, os.Stdout))
 }
 
-func run(ctx context.Context, args []string, env map[string]string, out io.Writer) int {
+func run(ctx context.Context, args []string, env map[string]string, in io.Reader, out io.Writer) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
@@ -55,7 +64,7 @@ func run(ctx context.Context, args []string, env map[string]string, out io.Write
 
 	logger := logging.New(out, cfg.LogLevel)
 
-	if err := cmd(ctx, cfg, logger); err != nil {
+	if err := cmd(ctx, invocation{cfg: cfg, logger: logger, args: args[1:], in: in, out: out}); err != nil {
 		logger.Error("command failed", slog.String("command", args[0]), slog.Any("error", err))
 
 		return 1

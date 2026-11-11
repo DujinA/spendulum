@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/DujinA/spendulum/backend/internal/httpapi/gen"
+	"github.com/DujinA/spendulum/backend/internal/httpapi/problem"
 )
 
 type probes struct {
@@ -22,7 +23,7 @@ func (p probes) GetReadyz(ctx context.Context, _ gen.GetReadyzRequestObject) (ge
 		p.logger.WarnContext(ctx, "readiness: database ping failed", slog.Any("error", err))
 
 		return gen.GetReadyz503ApplicationProblemPlusJSONResponse(
-			problem(http.StatusServiceUnavailable, "The database does not answer."),
+			problem.New(http.StatusServiceUnavailable, "The database does not answer."),
 		), nil
 	}
 

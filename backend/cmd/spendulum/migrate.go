@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/DujinA/spendulum/backend/internal/platform/config"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 )
 
-func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+func migrate(ctx context.Context, inv invocation) error {
+	cfg, logger := inv.cfg, inv.logger
+
 	d, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBTimeout)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
