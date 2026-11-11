@@ -146,7 +146,7 @@ func (s *Service) Login(ctx context.Context, email, password, ip string) (Starte
 		normalized = email
 	}
 
-	key := normalized + "\x00" + ip
+	key := string(hashToken(normalized + "\x00" + ip))
 	if wait := s.d.Limiter.Attempt(key, now); wait > 0 {
 		return StartedSession{}, &TooManyAttemptsError{RetryAfter: wait}
 	}
