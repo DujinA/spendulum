@@ -321,6 +321,18 @@ func TestDocsOnlyRunStartsNoRunnerWorkBeforeCIOK(t *testing.T) {
 	}
 }
 
+// On a push, paths-filter runs git fetch for the previous commit with the checkout's credentials.
+func TestChangesCheckoutKeepsCredentialsForThePathFilter(t *testing.T) {
+	checkout := ciWorkflow(t).job(t, "changes").uses("actions/checkout")
+	if len(checkout) != 1 {
+		t.Fatalf("changes has %d checkouts, want 1", len(checkout))
+	}
+
+	if with(checkout[0], "persist-credentials") == "false" {
+		t.Error("changes checks out with persist-credentials: false, so paths-filter cannot fetch the previous commit")
+	}
+}
+
 func TestPushToMasterRunsEveryJob(t *testing.T) {
 	w := ciWorkflow(t)
 
