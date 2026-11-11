@@ -362,6 +362,42 @@ func TestDeployCommitRunsOnlyManifestsAndSkipsDeploy(t *testing.T) {
 	}
 }
 
+func (w workflow) filterMatches(t *testing.T, name string, files ...string) bool {
+	t.Helper()
+
+	for _, f := range files {
+		for _, p := range w.pathFilters(t)[name] {
+			if matches(t, p, f) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// Rollback is a revert of a deploy commit (#16); deploying again would rebuild master's source and undo it.
+func TestRevertOfADeployCommitDoesNotDeployAgain(t *testing.T) {
+	w := ciWorkflow(t)
+	revert := "deploy/overlays/prod/kustomization.yaml"
+
+	if got := w.job(t, "changes").Outputs["image-changed"]; got != "${{ steps.filter.outputs.image }}" {
+		t.Errorf("changes output image-changed = %q, want the unscoped image filter", got)
+	}
+
+	if w.filterMatches(t, "image", revert) {
+		t.Errorf("the image filter matches %s, so a revert would redeploy", revert)
+	}
+
+	if !w.filterMatches(t, "image", "backend/internal/httpapi/probes.go") {
+		t.Error("the image filter does not match a backend change, so it would never deploy")
+	}
+
+	if d := w.job(t, "deploy"); !strings.Contains(d.If, "needs.changes.outputs.image-changed == 'true'") {
+		t.Errorf("deploy if = %q, want it to need an image change", d.If)
+	}
+}
+
 func TestFilteredJobsRunOnlyWhenTheirFilterMatches(t *testing.T) {
 	w := ciWorkflow(t)
 

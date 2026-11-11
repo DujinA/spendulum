@@ -30,6 +30,8 @@ jobs:
       manifests: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.manifests == 'true' }}
       image: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.image == 'true' }}
       deploy-commit: ${{ steps.scope.outputs.deploy-commit }}
+      # Unscoped, so a push that only reverts the prod image pin (a rollback) does not deploy again.
+      image-changed: ${{ steps.filter.outputs.image }}
     steps:
       # A push to master runs everything, except a deploy commit, which the path filters scope to manifests.
       - id: scope
@@ -256,7 +258,10 @@ jobs:
 
   deploy:
     needs: [changes, contract, backend, migrations, web, manifests, image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.deploy-commit != 'true'
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/master'
+      && needs.changes.outputs.deploy-commit != 'true'
+      && needs.changes.outputs.image-changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
