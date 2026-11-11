@@ -25,6 +25,10 @@ func (d *DB) InTx(ctx context.Context, fn func(ctx context.Context) error) error
 		return fmt.Errorf("db: begin: %w", err)
 	}
 
+	defer func() {
+		_ = d.rollback(ctx, tx)
+	}()
+
 	if err := fn(context.WithValue(ctx, txKey{}, tx)); err != nil {
 		return errors.Join(err, d.rollback(ctx, tx))
 	}
