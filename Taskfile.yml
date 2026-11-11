@@ -2,7 +2,7 @@ version: "3"
 
 vars:
   GO_TOOL: go tool -modfile=tools/go.mod
-  GO_TOOL_ROOT: go tool -modfile=../backend/tools/go.mod
+  GO_TOOL_FROM_DEPLOY: go tool -modfile=../backend/tools/go.mod
   IMAGE: spendulum:dev
 
 env:
@@ -70,7 +70,7 @@ tasks:
               -schema-location default \
               -schema-location '{{.CRD_SCHEMAS}}'
         done
-      - "{{.GO_TOOL_ROOT}} golangci-lint run --config ../backend/.golangci.yml ./..."
+      - "{{.GO_TOOL_FROM_DEPLOY}} golangci-lint run --config ../backend/.golangci.yml ./..."
       - go test ./...
 
   test:

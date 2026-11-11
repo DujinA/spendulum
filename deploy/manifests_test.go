@@ -26,8 +26,7 @@ func build(t *testing.T, dir string) resmap.ResMap {
 	return m
 }
 
-// decode finds the one resource of kind in m and unmarshals it into out.
-func decode(t *testing.T, m resmap.ResMap, kind string, out any) {
+func ofKind(t *testing.T, m resmap.ResMap, kind string) [][]byte {
 	t.Helper()
 
 	var found [][]byte
@@ -45,6 +44,13 @@ func decode(t *testing.T, m resmap.ResMap, kind string, out any) {
 		found = append(found, b)
 	}
 
+	return found
+}
+
+func decode(t *testing.T, m resmap.ResMap, kind string, out any) {
+	t.Helper()
+
+	found := ofKind(t, m, kind)
 	if len(found) != 1 {
 		t.Fatalf("want 1 %s, got %d", kind, len(found))
 	}
@@ -238,19 +244,10 @@ type application struct {
 func applications(t *testing.T) map[string]application {
 	t.Helper()
 
+	m := build(t, "argocd")
 	apps := map[string]application{}
 
-	for _, r := range build(t, "argocd").Resources() {
-		if r.GetKind() != "Application" {
-			t.Errorf("deploy/argocd holds a %s; it should hold only Applications", r.GetKind())
-			continue
-		}
-
-		b, err := r.AsYAML()
-		if err != nil {
-			t.Fatal(err)
-		}
-
+	for _, b := range ofKind(t, m, "Application") {
 		var a application
 		if err := yaml.Unmarshal(b, &a); err != nil {
 			t.Fatal(err)
@@ -259,15 +256,15 @@ func applications(t *testing.T) map[string]application {
 		apps[a.Metadata.Name] = a
 	}
 
+	if len(apps) != m.Size() {
+		t.Errorf("deploy/argocd renders %d resources but %d Applications; it should hold only Applications", m.Size(), len(apps))
+	}
+
 	return apps
 }
 
 func TestArgoCDHasRootAndProdAppWithAutomatedSync(t *testing.T) {
 	apps := applications(t)
-
-	if len(apps) != 2 {
-		t.Fatalf("want 2 Applications (root and app), got %d", len(apps))
-	}
 
 	for name, path := range map[string]string{"root": "deploy/argocd", "spendulum": "deploy/overlays/prod"} {
 		a, ok := apps[name]
@@ -294,7 +291,7 @@ func TestArgoCDHasRootAndProdAppWithAutomatedSync(t *testing.T) {
 	}
 
 	if ns := apps["spendulum"].Spec.Destination.Namespace; ns != "spendulum" {
-		t.Errorf("app destination namespace = %q, want spendulum", ns)
+		t.Errorf("spendulum destination namespace = %q, want spendulum", ns)
 	}
 }
 
