@@ -1,20 +1,34 @@
+# Advisory review only: never a required check.
+name: PR Agent
+
 on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
+    types: [created]
+
+permissions: {}
+
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' }}
+    name: Run pr agent on every pull request, respond to user comments
+    # Comments run it only on pull requests, and only from people with write access to the repository.
+    if: >-
+      github.event.sender.type != 'Bot'
+      && !github.event.pull_request.draft
+      && (github.event_name == 'pull_request'
+        || (github.event.issue.pull_request
+          && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     permissions:
       contents: read
       issues: write
       pull-requests: write
-    name: Run pr agent on every pull request, respond to user comments
     steps:
       - name: PR Agent action step
         id: pragent
-        uses: the-pr-agent/pr-agent@main
+        uses: the-pr-agent/pr-agent@e673a02076ce09a4726c3d0c3cc85780e59ca52b # v0.50.0
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
