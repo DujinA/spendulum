@@ -170,7 +170,7 @@ func (s *Service) Login(ctx context.Context, email, password, ip string) (Starte
 		return StartedSession{}, ErrInvalidCredentials
 	}
 
-	s.d.Limiter.Reset(key)
+	s.d.Limiter.Release(key, now)
 
 	id, err := uuid.NewV7()
 	if err != nil {

@@ -43,11 +43,11 @@ func TestLimiterForgetsAttemptsOlderThan15Minutes(t *testing.T) {
 	}
 }
 
-func TestLimiterKeysAreIndependentAndResetClearsOne(t *testing.T) {
+func TestLimiterKeysAreIndependentAndReleaseUncountsOneAttempt(t *testing.T) {
 	l := auth.NewLimiter()
 
-	for range 5 {
-		l.Attempt("a", t0())
+	for i := range 5 {
+		l.Attempt("a", t0().Add(time.Duration(i)*time.Second))
 		l.Attempt("b", t0())
 	}
 
@@ -55,14 +55,18 @@ func TestLimiterKeysAreIndependentAndResetClearsOne(t *testing.T) {
 		t.Errorf("an untouched key waits %s", wait)
 	}
 
-	l.Reset("a")
+	l.Release("a", t0().Add(4*time.Second))
 
-	if wait := l.Attempt("a", t0()); wait != 0 {
-		t.Errorf("a reset key waits %s", wait)
+	if wait := l.Attempt("a", t0().Add(5*time.Second)); wait != 0 {
+		t.Errorf("after releasing one of 5 attempts: wait %s, want 0", wait)
+	}
+
+	if wait := l.Attempt("a", t0().Add(6*time.Second)); wait == 0 {
+		t.Error("releasing one attempt forgot the others")
 	}
 
 	if wait := l.Attempt("b", t0()); wait == 0 {
-		t.Error("resetting one key allowed another")
+		t.Error("releasing one key's attempt allowed another key")
 	}
 }
 

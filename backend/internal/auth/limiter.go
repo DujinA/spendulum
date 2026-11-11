@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -21,7 +22,7 @@ func NewLimiter() *Limiter {
 	return &Limiter{attempts: make(map[string][]time.Time)}
 }
 
-// Attempt counts before the check runs, so concurrent guesses cannot pass the limit. 0 means go ahead.
+// Attempt counts first, so concurrent guesses cannot pass the limit; 0 means go ahead, and a success calls Release.
 func (l *Limiter) Attempt(key string, now time.Time) time.Duration {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -38,11 +39,18 @@ func (l *Limiter) Attempt(key string, now time.Time) time.Duration {
 	return 0
 }
 
-func (l *Limiter) Reset(key string) {
+func (l *Limiter) Release(key string, at time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	delete(l.attempts, key)
+	times := l.attempts[key]
+	for i, t := range slices.Backward(times) {
+		if t.Equal(at) {
+			l.attempts[key] = slices.Delete(slices.Clone(times), i, i+1)
+
+			return
+		}
+	}
 }
 
 func (l *Limiter) prune(key string, now time.Time) []time.Time {

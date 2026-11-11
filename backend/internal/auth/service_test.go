@@ -139,6 +139,26 @@ func TestSixthLoginAfterFiveFailuresIsRefusedEvenWithTheRightPassword(t *testing
 	}
 }
 
+func TestASuccessfulLoginDoesNotForgetEarlierFailures(t *testing.T) {
+	f := newFixture()
+	f.account(t)
+
+	for range 4 {
+		_, _ = f.svc.Login(t.Context(), "ana@example.test", "wrong password!", "192.0.2.1")
+	}
+
+	if _, err := f.svc.Login(t.Context(), "ana@example.test", "correct horse battery", "192.0.2.1"); err != nil {
+		t.Fatalf("login after 4 failures = %v, want success", err)
+	}
+
+	_, _ = f.svc.Login(t.Context(), "ana@example.test", "wrong password!", "192.0.2.1")
+
+	var tooMany *auth.TooManyAttemptsError
+	if _, err := f.svc.Login(t.Context(), "ana@example.test", "correct horse battery", "192.0.2.1"); !errors.As(err, &tooMany) {
+		t.Errorf("login after 5 failures within 15 minutes = %v, want TooManyAttemptsError", err)
+	}
+}
+
 func TestSessionIsRenewedTo30DaysFromNowOnlyOnceOlderThan15Days(t *testing.T) {
 	f := newFixture()
 	f.account(t)
