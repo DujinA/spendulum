@@ -1,0 +1,300 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The deploy job commits as this address; CI on such a commit runs only manifests.
+  DEPLOY_EMAIL: deploy@spendulum.invalid
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      contract: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.contract == 'true' }}
+      backend: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.backend == 'true' }}
+      migrations: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.migrations == 'true' }}
+      web: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.web == 'true' }}
+      manifests: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.manifests == 'true' }}
+      image: ${{ steps.scope.outputs.all == 'true' || steps.filter.outputs.image == 'true' }}
+      deploy-commit: ${{ steps.scope.outputs.deploy-commit }}
+      # Unscoped, so a push that only reverts the prod image pin (a rollback) does not deploy again.
+      image-changed: ${{ steps.filter.outputs.image }}
+    steps:
+      # A push to master runs everything, except a deploy commit, which the path filters scope to manifests.
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          AUTHOR_EMAIL: ${{ github.event.head_commit.author.email }}
+        run: |
+          deploy_commit=false
+          if [[ $EVENT == push && $AUTHOR_EMAIL == "$DEPLOY_EMAIL" ]]; then deploy_commit=true; fi
+          all=false
+          if [[ $EVENT == push && $deploy_commit == false ]]; then all=true; fi
+          echo "deploy-commit=$deploy_commit" >> "$GITHUB_OUTPUT"
+          echo "all=$all" >> "$GITHUB_OUTPUT"
+
+      # Keeps its credentials: paths-filter fetches the previous commit with them.
+      - if: github.event_name == 'push'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            ci: &ci
+              - .github/**
+              - Taskfile.yml
+            pnpm: &pnpm
+              - pnpm-lock.yaml
+              - package.json
+              - pnpm-workspace.yaml
+            go-tools: &go-tools
+              - backend/tools/**
+              - backend/.golangci.yml
+            contract:
+              - *ci
+              - *pnpm
+              - backend/**
+              - web/**
+              - api/openapi.yaml
+              - redocly.yaml
+              - .redocly.lint-ignore.yaml
+            backend:
+              - *ci
+              - backend/**
+              - api/openapi.yaml
+            migrations:
+              - *ci
+              - backend/**
+            web:
+              - *ci
+              - *pnpm
+              - web/**
+              - e2e/**
+              - api/openapi.yaml
+            manifests:
+              - *ci
+              - *go-tools
+              - deploy/**
+              - renovate.json
+            image:
+              - *ci
+              - *pnpm
+              - backend/**
+              - web/**
+              - e2e/**
+              - api/openapi.yaml
+              - Dockerfile
+              - .dockerignore
+
+  contract:
+    needs: changes
+    if: needs.changes.outputs.contract == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+          node: "true"
+      - run: task lint:api
+      - run: task gen
+      - name: Generated code is committed
+        run: |
+          git diff --exit-code
+          untracked=$(git status --porcelain)
+          if [[ -n $untracked ]]; then echo "$untracked"; exit 1; fi
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - run: task lint:go
+      - run: task vulncheck
+      - run: task test:go
+
+  migrations:
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      MIGRATIONS_BASE_REF: HEAD^1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - run: task migrations
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - run: task lint:web
+      - run: task test:web
+      - run: task build:web
+
+  manifests:
+    needs: changes
+    if: needs.changes.outputs.manifests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - run: task manifests
+
+  image:
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: spendulum:e2e
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: spendulum:e2e
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - id: e2e
+        env:
+          E2E_IMAGE: spendulum:e2e
+        run: task e2e
+      - if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-traces-and-videos
+          path: e2e/test-results/
+          retention-days: 14
+
+      # Only master publishes, and only the image that e2e just passed.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          ref="ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}"
+          docker tag spendulum:e2e "$ref"
+          docker push "$ref"
+          digest=$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')
+          if [[ ! $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "unexpected digest: $digest"; exit 1; fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: [changes, contract, backend, migrations, web, manifests, image]
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/master'
+      && needs.changes.outputs.deploy-commit != 'true'
+      && needs.changes.outputs.image-changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          go: "true"
+      - id: commit
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: .github/scripts/deploy-prod.sh "$GITHUB_SHA" "$DIGEST"
+
+  ci-ok:
+    needs: [changes, contract, backend, migrations, web, manifests, image]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions: {}
+    steps:
+      # A job skipped by its path filter passes; a failed or cancelled one does not.
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for result in $RESULTS; do
+            case $result in
+              success | skipped) ;;
+              *) echo "A needed job ended as $result."; exit 1 ;;
+            esac
+          done
