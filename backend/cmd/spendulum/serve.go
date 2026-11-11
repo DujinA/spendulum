@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/httpapi"
-	"github.com/DujinA/spendulum/backend/internal/platform/config"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/webui"
 )
@@ -18,7 +18,9 @@ import (
 var errPendingMigrations = errors.New("the database has pending migrations: run spendulum migrate first")
 
 // A drain past the deadline closes the remaining connections and still exits 0.
-func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+func serve(ctx context.Context, inv invocation) error {
+	cfg, logger := inv.cfg, inv.logger
+
 	d, err := db.Open(ctx, cfg.DatabaseURL, cfg.DBTimeout)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
@@ -39,6 +41,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 			DB:     d,
 			WebUI:  webui.Handler(webui.FS()),
 			Logger: logger,
+			Auth:   auth.NewHandler(newAuthService(d), logger, cfg.CookieSecure, cfg.TrustedProxies),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

@@ -180,7 +180,11 @@ tasks:
         sh: id -u
       E2E_GID:
         sh: id -g
+      # A fake account for the login journey; the database lives in tmpfs and goes away after the run.
+      E2E_EMAIL: e2e@example.test
+      E2E_PASSWORD: e2e-password-not-secret
     cmds:
       - '[ -n "{{.E2E_IMAGE}}" ] || docker build --tag spendulum:e2e .'
       - defer: "{{.COMPOSE}} --profile test down --volumes --remove-orphans"
+      - printf '%s\n%s\n' "$E2E_PASSWORD" "$E2E_PASSWORD" | {{.COMPOSE}} run --rm --no-TTY spendulum user create --email "$E2E_EMAIL"
       - "{{.COMPOSE}} --profile test run --rm playwright"

@@ -2,70 +2,55 @@ package httpapi_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"testing/fstest"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/legacy"
-
-	"github.com/DujinA/spendulum/backend/internal/httpapi"
-	"github.com/DujinA/spendulum/backend/internal/webui"
 )
 
-const indexHTML = `<!doctype html><title>Spendulum</title><div id="root"></div>`
+func newHandler(t *testing.T, dbErr error) http.Handler {
+	t.Helper()
 
-type fakeDB struct{ err error }
-
-func (f fakeDB) Ping(context.Context) error { return f.err }
-
-func newHandler(dbErr error) http.Handler {
-	spa := fstest.MapFS{
-		"index.html":        {Data: []byte(indexHTML)},
-		"assets/app-abc.js": {Data: []byte("console.log('app')")},
-	}
-
-	return httpapi.NewHandler(httpapi.Deps{
-		DB:     fakeDB{err: dbErr},
-		WebUI:  webui.Handler(spa),
-		Logger: slog.New(slog.DiscardHandler),
-	})
+	return newApp(t, withPinger(fakeDB{err: dbErr})).handler
 }
 
 func TestHealthzAnswers200EvenWhenTheDatabaseIsDown(t *testing.T) {
-	res := do(t, newHandler(errors.New("connection refused")), "/healthz")
+	res := do(t, newHandler(t, errors.New("connection refused")), "/healthz")
 
 	assertStatus(t, res, http.StatusOK)
 	assertMatchesSpec(t, res)
 }
 
 func TestReadyzAnswers200WhenTheDatabasePingSucceeds(t *testing.T) {
-	res := do(t, newHandler(nil), "/readyz")
+	res := do(t, newHandler(t, nil), "/readyz")
 
 	assertStatus(t, res, http.StatusOK)
 	assertMatchesSpec(t, res)
 }
 
 func TestReadyzAnswers503WhenTheDatabasePingFails(t *testing.T) {
-	res := do(t, newHandler(errors.New("connection refused")), "/readyz")
+	res := do(t, newHandler(t, errors.New("connection refused")), "/readyz")
 
 	assertStatus(t, res, http.StatusServiceUnavailable)
 	assertMatchesSpec(t, res)
 	assertProblem(t, res, http.StatusServiceUnavailable)
 }
 
-func TestUnknownAPIPathAnswers404ProblemJSON(t *testing.T) {
+func TestUnknownAPIPathWithASessionAnswers404ProblemJSON(t *testing.T) {
+	a := newApp(t)
+	a.account(t)
+	c := a.login(t)
+
 	for _, path := range []string{"/api", "/api/", "/api/nope", "/api/entries/123"} {
 		t.Run(path, func(t *testing.T) {
-			res := do(t, newHandler(nil), path)
+			res := a.do(t, request{path: path, cookie: c})
 
 			assertStatus(t, res, http.StatusNotFound)
 			assertProblem(t, res, http.StatusNotFound)
@@ -78,7 +63,7 @@ func TestUnknownAPIPathAnswers404ProblemJSON(t *testing.T) {
 }
 
 func TestRootServesTheSPA(t *testing.T) {
-	res := do(t, newHandler(nil), "/")
+	res := do(t, newHandler(t, nil), "/")
 
 	assertStatus(t, res, http.StatusOK)
 	assertBody(t, res, indexHTML)
@@ -87,7 +72,7 @@ func TestRootServesTheSPA(t *testing.T) {
 func TestUnknownPathOutsideAPIServesTheSPAIndex(t *testing.T) {
 	for _, path := range []string{"/entries", "/more/settings", "/apiary"} {
 		t.Run(path, func(t *testing.T) {
-			res := do(t, newHandler(nil), path)
+			res := do(t, newHandler(t, nil), path)
 
 			assertStatus(t, res, http.StatusOK)
 			assertBody(t, res, indexHTML)
@@ -100,7 +85,7 @@ func TestUnknownPathOutsideAPIServesTheSPAIndex(t *testing.T) {
 }
 
 func TestStaticAssetIsServedAsIs(t *testing.T) {
-	res := do(t, newHandler(nil), "/assets/app-abc.js")
+	res := do(t, newHandler(t, nil), "/assets/app-abc.js")
 
 	assertStatus(t, res, http.StatusOK)
 	assertBody(t, res, "console.log('app')")
@@ -111,7 +96,7 @@ func TestStaticAssetIsServedAsIs(t *testing.T) {
 }
 
 func TestMissingStaticAssetAnswers404(t *testing.T) {
-	res := do(t, newHandler(nil), "/assets/gone-123.js")
+	res := do(t, newHandler(t, nil), "/assets/gone-123.js")
 
 	assertStatus(t, res, http.StatusNotFound)
 }
@@ -206,7 +191,7 @@ func specRouter(t *testing.T) routers.Router {
 		t.Fatalf("load spec: %v", err)
 	}
 
-	if err := spec.Validate(context.Background()); err != nil {
+	if err := spec.Validate(t.Context()); err != nil {
 		t.Fatalf("spec is invalid: %v", err)
 	}
 

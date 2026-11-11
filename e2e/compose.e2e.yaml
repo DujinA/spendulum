@@ -39,6 +39,8 @@ services:
     command: ["serve"]
     environment:
       SPENDULUM_DATABASE_URL: *database-url
+      # Playwright reaches the app over plain HTTP at http://spendulum:8080, where browsers drop Secure cookies.
+      SPENDULUM_COOKIE_SECURE: "false"
     ports:
       - "127.0.0.1:8081:8080"
     depends_on:
@@ -57,6 +59,8 @@ services:
     environment:
       BASE_URL: http://spendulum:8080
       CI: ${CI:-}
+      E2E_EMAIL: ${E2E_EMAIL:-}
+      E2E_PASSWORD: ${E2E_PASSWORD:-}
       HOME: /tmp
     volumes:
       - ..:/work

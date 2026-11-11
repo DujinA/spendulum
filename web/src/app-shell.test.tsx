@@ -1,13 +1,12 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 
-import { createAppRouter } from "@/router";
+import { fakeSessionApi } from "@/test/api";
+import { renderApp } from "@/test/render";
 
 function renderAt(path: string) {
-  const router = createAppRouter({ history: createMemoryHistory({ initialEntries: [path] }) });
-  render(<RouterProvider router={router} />);
-  return router;
+  fakeSessionApi({ loggedIn: true });
+  return renderApp(path).router;
 }
 
 const items = ["Dashboard", "Entries", "Add entry", "More"];

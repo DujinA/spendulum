@@ -2,10 +2,46 @@ package httpapi
 
 import (
 	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/DujinA/spendulum/backend/internal/httpapi/problem"
 )
+
+// A cross-site form cannot send application/json, so this also stops form-based CSRF.
+func requireJSON(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAPI(r.URL.Path) && isMutating(r.Method) {
+			if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
+				problem.Write(w, http.StatusUnsupportedMediaType, "Send the request as application/json.")
+
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isMutating(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	default:
+		return true
+	}
+}
+
+func rejectCrossOrigin(next http.Handler) http.Handler {
+	c := http.NewCrossOriginProtection()
+	c.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		problem.Write(w, http.StatusForbidden, "Cross-origin requests are not allowed.")
+	}))
+
+	return c.Handler(next)
+}
 
 // Neither the browser nor the service worker may keep API or probe responses.
 func noStoreOutsideSPA(next http.Handler) http.Handler {

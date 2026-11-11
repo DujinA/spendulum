@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
+	"github.com/DujinA/spendulum/backend/internal/platform/db/gen"
 )
 
 const Image = "postgres:18"
@@ -142,4 +144,32 @@ func withDatabase(rawURL, name string) string {
 	u.Path = "/" + name
 
 	return u.String()
+}
+
+// NewUser inserts a user with a fake email, for tests of tables that reference users.
+func NewUser(tb testing.TB, q *gen.Queries) uuid.UUID {
+	tb.Helper()
+
+	id := uuid.Must(uuid.NewV7())
+	email := "user-" + strings.ToLower(rand.Text()[:8]) + "@example.test"
+
+	if err := q.CreateUser(tb.Context(), gen.CreateUserParams{ID: id, Email: email, PasswordHash: "not-a-hash"}); err != nil {
+		tb.Fatalf("dbtest: create user: %v", err)
+	}
+
+	return id
+}
+
+// Open opens a fresh migrated database and closes it when the test ends.
+func Open(tb testing.TB) *db.DB {
+	tb.Helper()
+
+	d, err := db.Open(tb.Context(), NewDatabase(tb), 5*time.Second)
+	if err != nil {
+		tb.Fatalf("dbtest: open: %v", err)
+	}
+
+	tb.Cleanup(d.Close)
+
+	return d
 }

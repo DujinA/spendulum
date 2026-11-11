@@ -4,6 +4,37 @@
  */
 
 export interface paths {
+    "/api/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The current session
+         * @description Answers 200 while the session cookie is valid. A session older than 15 days is renewed for 30 days.
+         */
+        get: operations["getSession"];
+        put?: never;
+        /**
+         * Log in
+         * @description Checks the email and password and starts a session that lasts 30 days.
+         *     A wrong password and an unknown email answer the same 401. After 5 failed
+         *     logins for the same email and IP within 15 minutes, further attempts
+         *     answer 429 until the oldest failure is 15 minutes old.
+         */
+        post: operations["createSession"];
+        /**
+         * Log out
+         * @description Deletes the current session on the server and clears the cookie.
+         */
+        delete: operations["deleteSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -48,6 +79,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Credentials: {
+            email: string;
+            password: string;
+        };
+        Session: {
+            /** @description The email of the logged-in user. */
+            email: string;
+        };
         ProbeStatus: {
             /** @enum {string} */
             status: "ok";
@@ -69,14 +108,124 @@ export interface components {
             instance?: string;
         };
     };
-    responses: never;
+    responses: {
+        /** @description The request is malformed. */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description No valid session, or the email or password is incorrect. */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description A mutating request without `Content-Type: application/json`. */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description The `spendulum_session` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`, with an explicit `Max-Age`. */
+        SessionCookie: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session is valid. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Credentials"];
+            };
+        };
+        responses: {
+            /** @description Logged in; the session cookie is set. */
+            204: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SessionCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Too many failed logins for this email from this IP. */
+            429: {
+                headers: {
+                    /** @description Seconds until the next attempt is allowed. */
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logged out; the session cookie is cleared. */
+            204: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SessionCookie"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
     getHealthz: {
         parameters: {
             query?: never;

@@ -19,7 +19,7 @@ func TestMain(m *testing.M) { dbtest.Main(m) }
 func TestServeWithAMissingVariableExitsAndNamesIt(t *testing.T) {
 	var out syncBuffer
 
-	code := run(t.Context(), []string{"serve"}, map[string]string{}, &out)
+	code := run(t.Context(), []string{"serve"}, map[string]string{}, strings.NewReader(""), &out)
 
 	if code == 0 {
 		t.Fatal("serve exited 0 without SPENDULUM_DATABASE_URL")
@@ -37,7 +37,7 @@ func TestServeWithAnInvalidVariableExitsAndNamesIt(t *testing.T) {
 		"SPENDULUM_DATABASE_URL": "postgres://app:secret@" + closedPort(t) + "/spendulum",
 		"SPENDULUM_DB_TIMEOUT":   "soon",
 	}
-	code := run(t.Context(), []string{"serve"}, env, &out)
+	code := run(t.Context(), []string{"serve"}, env, strings.NewReader(""), &out)
 
 	if code == 0 {
 		t.Fatal("serve exited 0 with an invalid SPENDULUM_DB_TIMEOUT")
@@ -56,7 +56,7 @@ func TestServeOnAnAddressItCannotListenOnExitsAndNamesIt(t *testing.T) {
 		"SPENDULUM_HTTP_ADDR":    "127.0.0.1:99999",
 	}
 
-	if code := run(t.Context(), []string{"serve"}, env, &out); code == 0 {
+	if code := run(t.Context(), []string{"serve"}, env, strings.NewReader(""), &out); code == 0 {
 		t.Fatal("serve exited 0 on port 99999")
 	}
 
@@ -68,7 +68,7 @@ func TestServeOnAnAddressItCannotListenOnExitsAndNamesIt(t *testing.T) {
 func TestUnknownCommandExitsNonZero(t *testing.T) {
 	var out syncBuffer
 
-	if code := run(t.Context(), []string{"fly"}, map[string]string{}, &out); code == 0 {
+	if code := run(t.Context(), []string{"fly"}, map[string]string{}, strings.NewReader(""), &out); code == 0 {
 		t.Fatal("unknown command exited 0")
 	}
 }
@@ -81,7 +81,7 @@ func TestMigrateWithAnUnreachableDatabaseExitsNonZero(t *testing.T) {
 		"SPENDULUM_DB_TIMEOUT":   "500ms",
 	}
 
-	if code := run(t.Context(), []string{"migrate"}, env, &out); code == 0 {
+	if code := run(t.Context(), []string{"migrate"}, env, strings.NewReader(""), &out); code == 0 {
 		t.Fatalf("migrate exited 0 against an unreachable database:\n%s", out.String())
 	}
 }
@@ -90,12 +90,12 @@ func TestMigrateTwiceSucceedsAndTheSecondRunAppliesNothing(t *testing.T) {
 	env := map[string]string{"SPENDULUM_DATABASE_URL": dbtest.NewEmptyDatabase(t)}
 
 	var first syncBuffer
-	if code := run(t.Context(), []string{"migrate"}, env, &first); code != 0 {
+	if code := run(t.Context(), []string{"migrate"}, env, strings.NewReader(""), &first); code != 0 {
 		t.Fatalf("first migrate exited %d:\n%s", code, first.String())
 	}
 
 	var second syncBuffer
-	if code := run(t.Context(), []string{"migrate"}, env, &second); code != 0 {
+	if code := run(t.Context(), []string{"migrate"}, env, strings.NewReader(""), &second); code != 0 {
 		t.Fatalf("second migrate exited %d:\n%s", code, second.String())
 	}
 
@@ -115,7 +115,7 @@ func TestServeExitsWhenMigrationsArePending(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	if code := run(ctx, []string{"serve"}, env, &out); code == 0 {
+	if code := run(ctx, []string{"serve"}, env, strings.NewReader(""), &out); code == 0 {
 		t.Fatalf("serve exited 0 with pending migrations:\n%s", out.String())
 	}
 
@@ -201,7 +201,7 @@ func startServe(ctx context.Context, env map[string]string) <-chan result {
 	go func() {
 		var out syncBuffer
 
-		code := run(ctx, []string{"serve"}, env, &out)
+		code := run(ctx, []string{"serve"}, env, strings.NewReader(""), &out)
 		done <- result{code: code, out: out.String()}
 	}()
 
