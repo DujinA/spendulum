@@ -14,6 +14,8 @@ import (
 func requireJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPI(r.URL.Path) && isMutating(r.Method) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 			if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
 				problem.Write(w, http.StatusUnsupportedMediaType, "Send the request as application/json.")
 
