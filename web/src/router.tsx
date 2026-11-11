@@ -45,7 +45,7 @@ const appRoute = createRoute({
   component: AppShell,
   beforeLoad: async ({ context, location }) => {
     try {
-      await context.queryClient.query(sessionQuery(context.api));
+      await context.queryClient.fetchQuery(sessionQuery(context.api));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- TanStack Router redirects by throwing

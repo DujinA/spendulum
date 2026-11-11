@@ -7,7 +7,7 @@ import { server } from "@/test/api";
 window.scrollTo = () => undefined;
 
 beforeAll(() => {
-  server.listen({ onUnhandledFrame: "error" });
+  server.listen({ onUnhandledRequest: "error" });
 });
 
 afterEach(() => {
