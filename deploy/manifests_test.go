@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"testing"
 
@@ -188,8 +189,27 @@ func TestProdOverlayTargetsSpendulumNamespaceAndGHCRImage(t *testing.T) {
 	var d appsv1.Deployment
 	decode(t, m, "Deployment", &d)
 
-	if got := d.Spec.Template.Spec.Containers[0].Image; got != "ghcr.io/dujina/spendulum:placeholder" {
-		t.Errorf("image = %s, want ghcr.io/dujina/spendulum:placeholder", got)
+	if got := d.Spec.Template.Spec.Containers[0].Image; !prodImage.MatchString(got) {
+		t.Errorf("image = %s, want ghcr.io/dujina/spendulum:placeholder or a deploy commit's sha-<sha>@sha256:<digest>", got)
+	}
+}
+
+var prodImage = regexp.MustCompile(`^ghcr\.io/dujina/spendulum:(placeholder|sha-[0-9a-f]{40}@sha256:[0-9a-f]{64})$`)
+
+func TestProdImagePatternAcceptsOnlyThePlaceholderOrAPinnedDigest(t *testing.T) {
+	for image, want := range map[string]bool{
+		"ghcr.io/dujina/spendulum:placeholder": true,
+		"ghcr.io/dujina/spendulum:sha-0123456789abcdef0123456789abcdef01234567@sha256:" +
+			"0000000000000000000000000000000000000000000000000000000000000000": true,
+		"ghcr.io/dujina/spendulum:latest":                                       false,
+		"ghcr.io/dujina/spendulum:sha-0123456789abcdef0123456789abcdef01234567": false,
+		"ghcr.io/dujina/spendulum:sha-0123456@sha256:" +
+			"0000000000000000000000000000000000000000000000000000000000000000": false,
+		"docker.io/dujina/spendulum:placeholder": false,
+	} {
+		if got := prodImage.MatchString(image); got != want {
+			t.Errorf("prodImage.MatchString(%q) = %v, want %v", image, got, want)
+		}
 	}
 }
 
