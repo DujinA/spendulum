@@ -4,6 +4,17 @@
   "schedule": ["before 6am on monday"],
   "minimumReleaseAge": "3 days",
   "postUpdateOptions": ["gomodTidy"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Tool versions in the CI setup action, marked with a renovate comment.",
+      "managerFilePatterns": ["/^\\.github/actions/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.*?(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    }
+  ],
   "argocd": {
     "managerFilePatterns": ["/^deploy/argocd/.+\\.ya?ml$/"]
   },
@@ -32,7 +43,7 @@
       "groupName": "Docker images"
     },
     {
-      "matchManagers": ["github-actions"],
+      "matchManagers": ["github-actions", "custom.regex"],
       "groupName": "GitHub Actions"
     },
     {
@@ -61,7 +72,7 @@
       "automerge": true
     },
     {
-      "matchManagers": ["github-actions"],
+      "matchManagers": ["github-actions", "custom.regex"],
       "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
       "automerge": true
     }

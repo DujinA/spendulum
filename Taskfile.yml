@@ -123,7 +123,7 @@ tasks:
       - go test -race -count=1 ./migrations/...
 
   check:
-    desc: Everything CI checks except e2e. Stage your changes first; the diff check compares the tree with the index.
+    desc: The CI checks except the image build, Trivy and e2e. Stage your changes first; the diff check compares the tree with the index.
     cmds:
       - task: gen
       - git diff --exit-code

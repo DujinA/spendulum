@@ -42,7 +42,7 @@ func masterRuleset(t *testing.T) ruleset {
 	return r
 }
 
-func (r ruleset) rule(t *testing.T, ruleType string, params any) bool {
+func (r ruleset) findRule(t *testing.T, ruleType string, params any) bool {
 	t.Helper()
 
 	for _, rule := range r.Rules {
@@ -70,7 +70,7 @@ func rulesetChecks(t *testing.T) []string {
 			Context string `json:"context"`
 		} `json:"required_status_checks"`
 	}
-	masterRuleset(t).rule(t, "required_status_checks", &params)
+	masterRuleset(t).findRule(t, "required_status_checks", &params)
 
 	checks := make([]string, 0, len(params.Checks))
 	for _, c := range params.Checks {
@@ -93,10 +93,9 @@ func TestRulesetRequiresAPRAndCIOKWithoutApproval(t *testing.T) {
 	r := masterRuleset(t)
 
 	var pr struct {
-		Approvals           *int     `json:"required_approving_review_count"`
-		AllowedMergeMethods []string `json:"allowed_merge_methods"`
+		Approvals *int `json:"required_approving_review_count"`
 	}
-	if !r.rule(t, "pull_request", &pr) {
+	if !r.findRule(t, "pull_request", &pr) {
 		t.Fatal("the ruleset does not require a pull request")
 	}
 
@@ -111,7 +110,7 @@ func TestRulesetRequiresAPRAndCIOKWithoutApproval(t *testing.T) {
 	var status struct {
 		Strict *bool `json:"strict_required_status_checks_policy"`
 	}
-	r.rule(t, "required_status_checks", &status)
+	r.findRule(t, "required_status_checks", &status)
 
 	if status.Strict == nil || *status.Strict {
 		t.Errorf("strict_required_status_checks_policy = %v, want false (no up-to-date branch)", status.Strict)
@@ -124,14 +123,14 @@ func TestRulesetAllowsOnlySquashMergesWithLinearHistory(t *testing.T) {
 	var pr struct {
 		AllowedMergeMethods []string `json:"allowed_merge_methods"`
 	}
-	r.rule(t, "pull_request", &pr)
+	r.findRule(t, "pull_request", &pr)
 
 	if !slices.Equal(pr.AllowedMergeMethods, []string{"squash"}) {
 		t.Errorf("allowed_merge_methods = %v, want [squash]", pr.AllowedMergeMethods)
 	}
 
 	for _, rule := range []string{"required_linear_history", "non_fast_forward", "deletion"} {
-		if !r.rule(t, rule, nil) {
+		if !r.findRule(t, rule, nil) {
 			t.Errorf("the ruleset has no %s rule", rule)
 		}
 	}

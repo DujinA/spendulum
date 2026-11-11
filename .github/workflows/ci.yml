@@ -82,6 +82,7 @@ jobs:
               - *ci
               - *pnpm
               - web/**
+              - e2e/**
               - api/openapi.yaml
             manifests:
               - *ci
@@ -246,9 +247,10 @@ jobs:
       - id: push
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
-          docker tag spendulum:e2e "ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}"
-          docker push "ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}"
-          digest=$(docker buildx imagetools inspect "ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}" --format '{{.Manifest.Digest}}')
+          ref="ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}"
+          docker tag spendulum:e2e "$ref"
+          docker push "$ref"
+          digest=$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')
           if [[ ! $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then echo "unexpected digest: $digest"; exit 1; fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 

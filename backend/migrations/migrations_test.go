@@ -12,8 +12,8 @@ import (
 
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/platform/db/dbtest"
+	"github.com/DujinA/spendulum/backend/internal/platform/db/migrationcheck"
 	"github.com/DujinA/spendulum/backend/migrations"
-	"github.com/DujinA/spendulum/backend/migrations/migrationcheck"
 )
 
 // CI sets it to the master commit the change applies to; locally the merge base with origin/master is used.

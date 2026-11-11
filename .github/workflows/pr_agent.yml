@@ -11,13 +11,17 @@ permissions: {}
 
 jobs:
   pr_agent_job:
-    name: Run pr agent on every pull request, respond to user comments
-    # Comments run it only on pull requests, and only from people with write access to the repository.
+    name: Review ready pull requests from people, and answer comments from collaborators
+    # On issue_comment, github.event.issue is the pull request.
     if: >-
       github.event.sender.type != 'Bot'
-      && !github.event.pull_request.draft
-      && (github.event_name == 'pull_request'
-        || (github.event.issue.pull_request
+      && ((github.event_name == 'pull_request'
+          && github.event.pull_request.user.type != 'Bot'
+          && !github.event.pull_request.draft)
+        || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.issue.user.type != 'Bot'
+          && !github.event.issue.draft
           && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
     runs-on: ubuntu-latest
     timeout-minutes: 12

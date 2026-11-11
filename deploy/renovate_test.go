@@ -19,12 +19,11 @@ type renovateRule struct {
 
 type renovateConfig struct {
 	Schedule     []string            `json:"schedule"`
-	Automerge    *bool               `json:"automerge"`
 	PackageRules []renovateRule      `json:"packageRules"`
 	ArgoCD       map[string][]string `json:"argocd"`
 }
 
-type update struct {
+type renovateUpdate struct {
 	manager, depType, updateType, file, pkg string
 }
 
@@ -44,11 +43,7 @@ func matchesAny(values []string, v string) bool {
 }
 
 // resolve applies packageRules in order, as Renovate does, for the matchers this config uses.
-func (c renovateConfig) resolve(u update) (group string, automerge bool) {
-	if c.Automerge != nil {
-		automerge = *c.Automerge
-	}
-
+func (c renovateConfig) resolve(u renovateUpdate) (group string, automerge bool) {
 	for _, r := range c.PackageRules {
 		if !matchesAny(r.MatchManagers, u.manager) || !matchesAny(r.MatchDepTypes, u.depType) ||
 			!matchesAny(r.MatchUpdateTypes, u.updateType) || !matchesAny(r.MatchFileNames, u.file) ||
@@ -80,19 +75,19 @@ func TestRenovateGroupsUpdatesPerEcosystem(t *testing.T) {
 	c := renovate(t)
 
 	for _, tc := range []struct {
-		u    update
+		u    renovateUpdate
 		want string
 	}{
-		{update{"gomod", "require", "minor", "backend/go.mod", "github.com/jackc/pgx/v5"}, "Go modules"},
-		{update{"gomod", "require", "minor", "backend/tools/go.mod", "github.com/sqlc-dev/sqlc"}, "Go tools"},
-		{update{"gomod", "require", "patch", "deploy/go.mod", "sigs.k8s.io/kustomize/api"}, "Go tools"},
-		{update{"npm", "dependencies", "minor", "web/package.json", "react"}, "npm dependencies"},
-		{update{"npm", "devDependencies", "minor", "web/package.json", "vite"}, "npm dev dependencies"},
-		{update{"dockerfile", "final", "minor", "Dockerfile", "golang"}, "Docker images"},
-		{update{"github-actions", "action", "minor", ".github/workflows/ci.yml", "actions/checkout"}, "GitHub Actions"},
-		{update{"argocd", "", "minor", "deploy/argocd/cert-manager.yaml", "cert-manager"}, "Helm charts"},
-		{update{"npm", "devDependencies", "minor", "e2e/package.json", "@playwright/test"}, "Playwright"},
-		{update{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, "Playwright"},
+		{renovateUpdate{"gomod", "require", "minor", "backend/go.mod", "github.com/jackc/pgx/v5"}, "Go modules"},
+		{renovateUpdate{"gomod", "require", "minor", "backend/tools/go.mod", "github.com/sqlc-dev/sqlc"}, "Go tools"},
+		{renovateUpdate{"gomod", "require", "patch", "deploy/go.mod", "sigs.k8s.io/kustomize/api"}, "Go tools"},
+		{renovateUpdate{"npm", "dependencies", "minor", "web/package.json", "react"}, "npm dependencies"},
+		{renovateUpdate{"npm", "devDependencies", "minor", "web/package.json", "vite"}, "npm dev dependencies"},
+		{renovateUpdate{"dockerfile", "final", "minor", "Dockerfile", "golang"}, "Docker images"},
+		{renovateUpdate{"github-actions", "action", "minor", ".github/workflows/ci.yml", "actions/checkout"}, "GitHub Actions"},
+		{renovateUpdate{"argocd", "", "minor", "deploy/argocd/cert-manager.yaml", "cert-manager"}, "Helm charts"},
+		{renovateUpdate{"npm", "devDependencies", "minor", "e2e/package.json", "@playwright/test"}, "Playwright"},
+		{renovateUpdate{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, "Playwright"},
 	} {
 		if got, _ := c.resolve(tc.u); got != tc.want {
 			t.Errorf("%s %s in %s: group = %q, want %q", tc.u.manager, tc.u.pkg, tc.u.file, got, tc.want)
@@ -104,23 +99,23 @@ func TestRenovateAutomergesOnlyDevDependencyAndActionPatchesAndMinors(t *testing
 	c := renovate(t)
 
 	for _, tc := range []struct {
-		u    update
+		u    renovateUpdate
 		want bool
 	}{
-		{update{"npm", "devDependencies", "patch", "web/package.json", "vite"}, true},
-		{update{"npm", "devDependencies", "minor", "e2e/package.json", "@playwright/test"}, true},
-		{update{"gomod", "require", "minor", "backend/tools/go.mod", "github.com/sqlc-dev/sqlc"}, true},
-		{update{"github-actions", "action", "patch", ".github/workflows/ci.yml", "actions/checkout"}, true},
-		{update{"github-actions", "action", "digest", ".github/workflows/ci.yml", "actions/checkout"}, true},
-		{update{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, true},
-		{update{"npm", "devDependencies", "major", "web/package.json", "vite"}, false},
-		{update{"github-actions", "action", "major", ".github/workflows/ci.yml", "actions/checkout"}, false},
-		{update{"npm", "dependencies", "minor", "web/package.json", "react"}, false},
-		{update{"npm", "dependencies", "major", "web/package.json", "react"}, false},
-		{update{"gomod", "require", "patch", "backend/go.mod", "github.com/jackc/pgx/v5"}, false},
-		{update{"gomod", "require", "major", "backend/go.mod", "github.com/jackc/pgx/v5"}, false},
-		{update{"dockerfile", "final", "patch", "Dockerfile", "golang"}, false},
-		{update{"argocd", "", "patch", "deploy/argocd/cert-manager.yaml", "cert-manager"}, false},
+		{renovateUpdate{"npm", "devDependencies", "patch", "web/package.json", "vite"}, true},
+		{renovateUpdate{"npm", "devDependencies", "minor", "e2e/package.json", "@playwright/test"}, true},
+		{renovateUpdate{"gomod", "require", "minor", "backend/tools/go.mod", "github.com/sqlc-dev/sqlc"}, true},
+		{renovateUpdate{"github-actions", "action", "patch", ".github/workflows/ci.yml", "actions/checkout"}, true},
+		{renovateUpdate{"github-actions", "action", "digest", ".github/workflows/ci.yml", "actions/checkout"}, true},
+		{renovateUpdate{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, true},
+		{renovateUpdate{"npm", "devDependencies", "major", "web/package.json", "vite"}, false},
+		{renovateUpdate{"github-actions", "action", "major", ".github/workflows/ci.yml", "actions/checkout"}, false},
+		{renovateUpdate{"npm", "dependencies", "minor", "web/package.json", "react"}, false},
+		{renovateUpdate{"npm", "dependencies", "major", "web/package.json", "react"}, false},
+		{renovateUpdate{"gomod", "require", "patch", "backend/go.mod", "github.com/jackc/pgx/v5"}, false},
+		{renovateUpdate{"gomod", "require", "major", "backend/go.mod", "github.com/jackc/pgx/v5"}, false},
+		{renovateUpdate{"dockerfile", "final", "patch", "Dockerfile", "golang"}, false},
+		{renovateUpdate{"argocd", "", "patch", "deploy/argocd/cert-manager.yaml", "cert-manager"}, false},
 	} {
 		if _, got := c.resolve(tc.u); got != tc.want {
 			t.Errorf("%s %s %s in %s: automerge = %v, want %v", tc.u.manager, tc.u.updateType, tc.u.pkg, tc.u.file, got, tc.want)

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/DujinA/spendulum/backend/migrations/migrationcheck"
+	"github.com/DujinA/spendulum/backend/internal/platform/db/migrationcheck"
 )
 
 func files(names ...string) fstest.MapFS {

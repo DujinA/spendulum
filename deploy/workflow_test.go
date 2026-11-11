@@ -276,7 +276,7 @@ func TestChangesJobSelectsJobsPerThePathFilterTable(t *testing.T) {
 		{[]string{"web/src/main.tsx"}, []string{"contract", "web", "image"}},
 		{[]string{"pnpm-lock.yaml"}, []string{"contract", "web", "image"}},
 		{[]string{"package.json"}, []string{"contract", "web", "image"}},
-		{[]string{"e2e/tests/smoke.spec.ts"}, []string{"image"}},
+		{[]string{"e2e/tests/smoke.spec.ts"}, []string{"web", "image"}},
 		{[]string{"api/openapi.yaml"}, []string{"contract", "backend", "web", "image"}},
 		{[]string{"Dockerfile"}, []string{"image"}},
 		{[]string{".dockerignore"}, []string{"image"}},
@@ -578,7 +578,7 @@ func TestMasterPushPublishesTheTestedImageBySHAWithoutLatest(t *testing.T) {
 		t.Errorf("push if = %q, want only pushes to master", push.If)
 	}
 
-	for _, want := range []string{"docker tag spendulum:e2e", "ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}", "docker push", "digest="} {
+	for _, want := range []string{`ref="ghcr.io/dujina/spendulum:sha-${GITHUB_SHA}"`, `docker tag spendulum:e2e "$ref"`, `docker push "$ref"`, "digest="} {
 		if !strings.Contains(push.Run, want) {
 			t.Errorf("push step does not contain %q:\n%s", want, push.Run)
 		}
@@ -626,9 +626,9 @@ func TestDeployJobCommitsTheDigestSeriallyWithTheDeployKey(t *testing.T) {
 		t.Errorf("deploy checkout = %+v, want the deploy key and full history", checkout)
 	}
 
-	run := d.step(t, "commit")
-	if !strings.Contains(run.Run, ".github/scripts/deploy-prod.sh") || run.Env["DIGEST"] != "${{ needs.image.outputs.digest }}" {
-		t.Errorf("commit step = %+v, want deploy-prod.sh with the image digest", run)
+	commit := d.step(t, "commit")
+	if !strings.Contains(commit.Run, ".github/scripts/deploy-prod.sh") || commit.Env["DIGEST"] != "${{ needs.image.outputs.digest }}" {
+		t.Errorf("commit step = %+v, want deploy-prod.sh with the image digest", commit)
 	}
 
 	if !strings.Contains(readFile(t, "../.github/scripts/deploy-prod.sh"), `edit set image "$image:sha-$sha@$digest"`) {
@@ -758,7 +758,10 @@ func TestPRAgentIsPinnedAdvisoryAndSkipsDraftsAndBots(t *testing.T) {
 	}
 
 	for _, j := range w.Jobs {
-		for _, want := range []string{"github.event.pull_request.draft", "Bot"} {
+		for _, want := range []string{
+			"github.event.pull_request.draft", "github.event.issue.draft",
+			"github.event.pull_request.user.type != 'Bot'", "github.event.issue.user.type != 'Bot'",
+		} {
 			if !strings.Contains(j.If, want) {
 				t.Errorf("pr_agent if = %q, want it to check %q", j.If, want)
 			}

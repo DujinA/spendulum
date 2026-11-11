@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # Usage: deploy-prod.sh <full commit sha> <sha256:image digest>
-# Pins the tested image in deploy/overlays/prod and pushes the commit to master.
-# Each attempt starts again from the latest master, so a push race only costs a retry.
 set -euo pipefail
 
 sha=$1
@@ -11,6 +9,7 @@ kustomize=${KUSTOMIZE:-go tool kustomize}
 image=ghcr.io/dujina/spendulum
 kustomization=deploy/overlays/prod/kustomization.yaml
 
+# Each attempt starts again from the latest master, so a push race costs only a retry.
 for attempt in 1 2 3 4 5; do
   git fetch --quiet origin master
   git reset --quiet --hard origin/master
