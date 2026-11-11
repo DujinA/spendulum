@@ -159,6 +159,25 @@ func TestASuccessfulLoginDoesNotForgetEarlierFailures(t *testing.T) {
 	}
 }
 
+func TestLoginWhosePasswordIsResetDuringTheCheckStartsNoSession(t *testing.T) {
+	f := newFixture()
+	f.account(t)
+
+	f.hasher.duringVerify = func() {
+		if _, err := f.svc.ResetPassword(t.Context(), "ana@example.test", "a brand new password"); err != nil {
+			t.Errorf("ResetPassword: %v", err)
+		}
+	}
+
+	if _, err := f.svc.Login(t.Context(), "ana@example.test", "correct horse battery", "192.0.2.1"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("Login = %v, want ErrInvalidCredentials", err)
+	}
+
+	if len(f.repo.sessions) != 0 {
+		t.Errorf("sessions after the reset = %d, want 0", len(f.repo.sessions))
+	}
+}
+
 func TestSessionIsRenewedTo30DaysFromNowOnlyOnceOlderThan15Days(t *testing.T) {
 	f := newFixture()
 	f.account(t)
@@ -295,12 +314,21 @@ type fakeTx struct{}
 func (fakeTx) InTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 
 // fakeHasher "hashes" by prefixing, and counts verifications.
-type fakeHasher struct{ verifies int }
+type fakeHasher struct {
+	verifies     int
+	duringVerify func()
+}
 
 func (*fakeHasher) Hash(_ context.Context, pw string) (string, error) { return "hash:" + pw, nil }
 
 func (h *fakeHasher) Verify(_ context.Context, hash, pw string) (bool, error) {
 	h.verifies++
+
+	if h.duringVerify != nil {
+		run := h.duringVerify
+		h.duringVerify = nil
+		run()
+	}
 
 	return hash == "hash:"+pw, nil
 }
@@ -377,9 +405,15 @@ func (r *fakeRepo) SetPasswordHash(_ context.Context, userID uuid.UUID, hash str
 	return auth.ErrUserNotFound
 }
 
-func (r *fakeRepo) CreateSession(_ context.Context, userID uuid.UUID, s auth.Session, tokenHash []byte) error {
+func (r *fakeRepo) CreateSession(_ context.Context, userID uuid.UUID, s auth.Session, tokenHash []byte, verifiedHash string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	for _, u := range r.users {
+		if u.ID == userID && u.PasswordHash != verifiedHash {
+			return auth.ErrInvalidCredentials
+		}
+	}
 
 	s.UserID = userID
 	r.sessions[string(tokenHash)] = s

@@ -14,7 +14,8 @@ type Repository interface {
 	UserByEmail(ctx context.Context, email string) (User, error)
 	UserEmail(ctx context.Context, userID uuid.UUID) (string, error)
 	SetPasswordHash(ctx context.Context, userID uuid.UUID, hash string) error
-	CreateSession(ctx context.Context, userID uuid.UUID, s Session, tokenHash []byte) error
+	// CreateSession answers ErrInvalidCredentials when the password hash is no longer verifiedHash.
+	CreateSession(ctx context.Context, userID uuid.UUID, s Session, tokenHash []byte, verifiedHash string) error
 	SessionByTokenHash(ctx context.Context, tokenHash []byte, now time.Time) (Session, error)
 	RenewSession(ctx context.Context, userID, sessionID uuid.UUID, expiresAt time.Time) error
 	DeleteSession(ctx context.Context, userID, sessionID uuid.UUID) error
@@ -170,17 +171,17 @@ func (s *Service) Login(ctx context.Context, email, password, ip string) (Starte
 		return StartedSession{}, ErrInvalidCredentials
 	}
 
-	s.d.Limiter.Release(key, now)
-
 	id, err := uuid.NewV7()
 	if err != nil {
 		return StartedSession{}, fmt.Errorf("auth: new id: %w", err)
 	}
 
 	started := StartedSession{Token: newToken(), Session: Session{ID: id, UserID: user.ID, ExpiresAt: now.Add(SessionLifetime)}}
-	if err := s.d.Repo.CreateSession(ctx, user.ID, started.Session, hashToken(started.Token)); err != nil {
+	if err := s.d.Repo.CreateSession(ctx, user.ID, started.Session, hashToken(started.Token), user.PasswordHash); err != nil {
 		return StartedSession{}, fmt.Errorf("auth: create session: %w", err)
 	}
+
+	s.d.Limiter.Release(key, now)
 
 	return started, nil
 }

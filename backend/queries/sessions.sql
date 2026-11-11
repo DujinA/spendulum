@@ -1,5 +1,10 @@
--- name: CreateSession :exec
-INSERT INTO sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4);
+-- FOR SHARE waits for a password reset in flight, so a login that verified the old password inserts nothing.
+-- name: CreateSession :execrows
+INSERT INTO sessions (id, user_id, token_hash, expires_at)
+SELECT @id, @user_id, @token_hash, @expires_at
+WHERE EXISTS (
+    SELECT 1 FROM users WHERE id = @user_id AND password_hash = @verified_hash FOR SHARE
+);
 
 -- unscoped: the session token is what identifies the user.
 -- name: SessionByTokenHash :one

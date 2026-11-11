@@ -75,10 +75,16 @@ func (p *Postgres) SetPasswordHash(ctx context.Context, userID uuid.UUID, hash s
 	return nil
 }
 
-func (p *Postgres) CreateSession(ctx context.Context, userID uuid.UUID, s Session, tokenHash []byte) error {
-	err := p.q.CreateSession(ctx, gen.CreateSessionParams{ID: s.ID, UserID: userID, TokenHash: tokenHash, ExpiresAt: s.ExpiresAt})
-	if err != nil {
+func (p *Postgres) CreateSession(ctx context.Context, userID uuid.UUID, s Session, tokenHash []byte, verifiedHash string) error {
+	n, err := p.q.CreateSession(ctx, gen.CreateSessionParams{
+		ID: s.ID, UserID: userID, TokenHash: tokenHash, ExpiresAt: s.ExpiresAt, VerifiedHash: verifiedHash,
+	})
+
+	switch {
+	case err != nil:
 		return fmt.Errorf("auth: insert session: %w", err)
+	case n == 0:
+		return ErrInvalidCredentials
 	}
 
 	return nil

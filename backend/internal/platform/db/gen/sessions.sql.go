@@ -12,25 +12,35 @@ import (
 	"github.com/google/uuid"
 )
 
-const createSession = `-- name: CreateSession :exec
-INSERT INTO sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)
+const createSession = `-- name: CreateSession :execrows
+INSERT INTO sessions (id, user_id, token_hash, expires_at)
+SELECT $1, $2, $3, $4
+WHERE EXISTS (
+    SELECT 1 FROM users WHERE id = $2 AND password_hash = $5 FOR SHARE
+)
 `
 
 type CreateSessionParams struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	TokenHash []byte
-	ExpiresAt time.Time
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	TokenHash    []byte
+	ExpiresAt    time.Time
+	VerifiedHash string
 }
 
-func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
-	_, err := q.db.Exec(ctx, createSession,
+// FOR SHARE waits for a password reset in flight, so a login that verified the old password inserts nothing.
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createSession,
 		arg.ID,
 		arg.UserID,
 		arg.TokenHash,
 		arg.ExpiresAt,
+		arg.VerifiedHash,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteSession = `-- name: DeleteSession :exec
