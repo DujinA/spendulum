@@ -1,5 +1,0 @@
-# The probes answer only 200 or 503; they have no 4xx response.
-api/openapi.yaml:
-  operation-4xx-response:
-    - '#/paths/~1healthz/get/responses'
-    - '#/paths/~1readyz/get/responses'

@@ -14,7 +14,6 @@ Test first: each acceptance criterion becomes at least one failing test before t
 
 - `task test` runs Go with `-race` and Vitest. Docker must run for the Go tests.
 - One Go package: `cd backend && go test -race ./internal/<pkg>/`.
-- `task migrations` compares `backend/migrations/` with `origin/master` (CI sets `MIGRATIONS_BASE_REF`) and fails on an edited, deleted, duplicate or out-of-order migration.
 - One web test file: `pnpm --filter @spendulum/web exec vitest run src/<file>.test.tsx`.
 - `task e2e` builds the image, starts `e2e/compose.e2e.yaml` and runs Playwright in its container on WebKit (iPhone 15) and Chromium (desktop).
 

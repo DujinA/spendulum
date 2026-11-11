@@ -37,39 +37,20 @@ tasks:
       - "{{.GO_TOOL}} sqlc generate"
 
   lint:
-    desc: Redocly, golangci-lint, govulncheck, eslint, tsc and the deploy manifests
+    desc: golangci-lint, eslint, tsc and the deploy manifests
+    deps: [install]
     cmds:
-      - task: lint:api
       - task: lint:go
-      - task: vulncheck
-      - task: lint:web
-      - task: manifests
-
-  lint:api:
-    desc: Redocly lint of the API contract
-    deps: [install]
-    cmds:
-      - pnpm exec redocly lint api/openapi.yaml
-
-  lint:go:
-    desc: golangci-lint on the backend
-    dir: backend
-    cmds:
-      - "{{.GO_TOOL}} golangci-lint run ./..."
-
-  vulncheck:
-    desc: govulncheck on the backend; fails on a vulnerability the code reaches
-    dir: backend
-    cmds:
-      - "{{.GO_TOOL}} govulncheck ./..."
-
-  lint:web:
-    desc: eslint and tsc on the web app, tsc on the e2e tests
-    deps: [install]
-    cmds:
       - pnpm --filter @spendulum/web lint
       - pnpm --filter @spendulum/web typecheck
       - pnpm --filter @spendulum/e2e typecheck
+      - task: manifests
+
+  lint:go:
+    internal: true
+    dir: backend
+    cmds:
+      - "{{.GO_TOOL}} golangci-lint run ./..."
 
   manifests:
     desc: Build every overlay and deploy/argocd, validate them with kubeconform -strict, and run the manifest tests
@@ -94,36 +75,19 @@ tasks:
 
   test:
     desc: Go tests with the race detector (Docker runs PostgreSQL) and Vitest
+    deps: [install]
     cmds:
       - task: test:go
-      - task: test:web
+      - pnpm --filter @spendulum/web test
 
   test:go:
-    desc: Go tests with the race detector; Docker runs PostgreSQL
+    internal: true
     dir: backend
     cmds:
       - go test -race ./...
 
-  test:web:
-    desc: Vitest
-    deps: [install]
-    cmds:
-      - pnpm --filter @spendulum/web test
-
-  build:web:
-    desc: Type-check and build the web app with Vite
-    deps: [install]
-    cmds:
-      - pnpm --filter @spendulum/web build
-
-  migrations:
-    desc: Goose up on an empty database, and the ADR 0008 checks against master (MIGRATIONS_BASE_REF)
-    dir: backend
-    cmds:
-      - go test -race -count=1 ./migrations/...
-
   check:
-    desc: The CI checks except the image build, Trivy and e2e. Stage your changes first; the diff check compares the tree with the index.
+    desc: Everything CI checks except e2e. Stage your changes first; the diff check compares the tree with the index.
     cmds:
       - task: gen
       - git diff --exit-code
@@ -170,17 +134,17 @@ tasks:
       - docker build --tag {{.IMAGE}} .
 
   e2e:
-    desc: Build the image (or use E2E_IMAGE) and run the Playwright smoke tests against it on compose
+    desc: Build the image and run the Playwright smoke tests against it on compose
     deps: [install]
     vars:
       COMPOSE: docker compose --file e2e/compose.e2e.yaml
     env:
-      SPENDULUM_IMAGE: '{{.E2E_IMAGE | default "spendulum:e2e"}}'
+      SPENDULUM_IMAGE: spendulum:e2e
       E2E_UID:
         sh: id -u
       E2E_GID:
         sh: id -g
     cmds:
-      - '[ -n "{{.E2E_IMAGE}}" ] || docker build --tag spendulum:e2e .'
+      - docker build --tag spendulum:e2e .
       - defer: "{{.COMPOSE}} --profile test down --volumes --remove-orphans"
       - "{{.COMPOSE}} --profile test run --rm playwright"

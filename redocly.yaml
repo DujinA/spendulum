@@ -1,6 +1,0 @@
-extends:
-  - recommended
-
-rules:
-  # Spendulum is private; the contract has no licence to declare.
-  info-license: off

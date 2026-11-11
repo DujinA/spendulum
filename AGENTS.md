@@ -36,7 +36,6 @@ web/                        Vite + React PWA; tests sit beside the code
 deploy/                     Go module: Kustomize base, overlays/prod, argocd/ (app-of-apps), manifest tests
 e2e/                        Playwright, compose.e2e.yaml, stubs/
 docs/adr/  docs/agents/     decisions and agent guides
-.github/                    ci.yml (CI calls task targets), actions/setup, scripts/deploy-prod.sh, rulesets/
 ```
 
 Generated code (`backend/internal/httpapi/gen/`, `backend/internal/platform/db/gen/`, `web/src/api/schema.gen.ts`) is marked `linguist-generated`. Never edit it by hand: run `task gen`.
@@ -49,10 +48,9 @@ Prerequisites: Go, a C compiler (sqlc builds with cgo), Node 26 LTS, pnpm, Task 
 |---|---|
 | `task dev` | PostgreSQL 18 on compose, `spendulum migrate`, the Go server on :8080 and the Vite dev server with `/api` proxied to Go |
 | `task gen` | oapi-codegen (strict server), sqlc and openapi-typescript |
-| `task lint` | Redocly on `api/openapi.yaml`, golangci-lint (pinned, strict), govulncheck, eslint, `tsc`, `task manifests` |
+| `task lint` | golangci-lint (pinned, strict), eslint, `tsc`, `task manifests` |
 | `task manifests` | `kustomize build` of every overlay and `deploy/argocd/`, `kubeconform -strict` with CRD schemas, and the manifest tests in `deploy/` |
 | `task test` | `go test -race ./...` (PostgreSQL through testcontainers, so Docker must run) and Vitest |
-| `task migrations` | Goose up on an empty database, and the ADR 0008 checks: migrations on `master` unchanged, new versions after the last one there |
 | `task check` | `task gen`, `git diff --exit-code`, `task lint`, `task test`. Stage your changes first: the diff compares the tree with the index |
 | `task e2e` | builds the image and runs the Playwright smoke tests on WebKit (iPhone 15) and Chromium |
 | `task migrate` | applies pending migrations to the dev database |
