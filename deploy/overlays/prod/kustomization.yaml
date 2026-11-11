@@ -10,4 +10,4 @@ resources:
 images:
 - digest: sha256:129d95bd3dfe91a50701ce4f5960f8f6a9e5dd59817a00da8b17b00053b9504e
   name: ghcr.io/dujina/spendulum
-  newTag: sha-818b2f804143f4667d714bb226ca6eaad77b2e5b
+  newTag: sha-0a9217d08229301b53f82acd9b6e51e796badf60
