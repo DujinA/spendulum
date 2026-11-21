@@ -45,6 +45,7 @@ func newAPIDeps(d *db.DB, cfg config.Config, logger *slog.Logger) httpapi.Deps {
 		Entries: entry.NewHandler(entry.NewService(entry.Deps{
 			Repo: entry.NewPostgres(q), Tx: d, Settings: settingsSvc,
 		}), logger),
+		Currencies: fx.NewHandler(fx.NewService(fx.Deps{Repo: fx.NewPostgres(q)})),
 	}
 }
 

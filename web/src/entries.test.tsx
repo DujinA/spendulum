@@ -68,6 +68,22 @@ describe("entry list", () => {
     expect(income).toHaveTextContent("145,000.00 din");
   });
 
+  it("formats each amount with its currency's minor units from the currencies list", async () => {
+    fakeSessionApi({ loggedIn: true });
+    fakeEntriesApi({
+      entries: [
+        fakeEntry({ entryDate: "2026-03-02", amount: 1780, currency: "JPY", note: "yen" }),
+        fakeEntry({ entryDate: "2026-03-02", amount: 1780800, currency: "KWD", note: "dinar" }),
+      ],
+    });
+    renderApp("/entries");
+
+    await days();
+
+    expect(screen.getByText("yen").closest("li")).toHaveTextContent("1,780 JPY");
+    expect(screen.getByText("dinar").closest("li")).toHaveTextContent("1,780.800 KWD");
+  });
+
   it("loads the next page when the end of the list scrolls into view", async () => {
     fakeSessionApi({ loggedIn: true });
     const api = fakeEntriesApi({

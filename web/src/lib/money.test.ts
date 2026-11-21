@@ -1,19 +1,27 @@
-import { formatMoney, formatTyped, pressKey, toMinorUnits } from "@/lib/money";
+import { findCurrency, formatMoney, formatTyped, pressKey, toMinorUnits } from "@/lib/money";
 
-function typeKeys(keys: string) {
+const rsd = { code: "RSD", minorUnits: 2 };
+const jpy = { code: "JPY", minorUnits: 0 };
+const kwd = { code: "KWD", minorUnits: 3 };
+
+function typeKeys(keys: string, currency = rsd) {
   let typed = "";
-  for (const key of keys) typed = pressKey(typed, key === "<" ? "Backspace" : key, "RSD");
+  for (const key of keys) typed = pressKey(typed, key === "<" ? "Backspace" : key, currency);
   return typed;
 }
 
 describe("formatMoney", () => {
   it.each([
-    [178080, "RSD", "1,780.80 din"],
-    [-199000, "RSD", "−1,990.00 din"],
-    [5, "RSD", "0.05 din"],
-    [123456789012, "RSD", "1,234,567,890.12 din"],
-    [1050, "EUR", "10.50 EUR"],
-  ])("formats %i %s as %s", (amount, currency, want) => {
+    [178080, rsd, "1,780.80 din"],
+    [-199000, rsd, "−1,990.00 din"],
+    [5, rsd, "0.05 din"],
+    [123456789012, rsd, "1,234,567,890.12 din"],
+    [1050, { code: "EUR", minorUnits: 2 }, "10.50 EUR"],
+    [1780, jpy, "1,780 JPY"],
+    [-5, jpy, "−5 JPY"],
+    [1780800, kwd, "1,780.800 KWD"],
+    [5, kwd, "0.005 KWD"],
+  ])("formats %i %o as %s", (amount, currency, want) => {
     expect(formatMoney(amount, currency)).toBe(want);
   });
 });
@@ -29,16 +37,36 @@ describe("keypad amount", () => {
     ["12<<3", "3", 300],
     ["1234567890123", "123456789012", 12345678901200],
     ["", "", 0],
-  ])("typing %s shows %s and is %i minor units", (keys, want, minor) => {
+  ])("typing %s in RSD shows %s and is %i minor units", (keys, want, minor) => {
     const typed = typeKeys(keys);
 
     expect(typed).toBe(want);
-    expect(toMinorUnits(typed, "RSD")).toBe(minor);
+    expect(toMinorUnits(typed, rsd)).toBe(minor);
+  });
+
+  it.each([
+    [jpy, "12.5", "125", 125],
+    [jpy, "1,780", "1780", 1780],
+    [kwd, "1.2345", "1.234", 1234],
+    [kwd, "1.2", "1.2", 1200],
+    [kwd, ".05", "0.05", 50],
+  ])("typing in %o: %s shows %s and is %i minor units", (currency, keys, want, minor) => {
+    const typed = typeKeys(keys, currency);
+
+    expect(typed).toBe(want);
+    expect(toMinorUnits(typed, currency)).toBe(minor);
   });
 
   it("groups thousands while typing and shows 0 when empty", () => {
     expect(formatTyped("1780.8")).toBe("1,780.8");
     expect(formatTyped("1234567")).toBe("1,234,567");
     expect(formatTyped("")).toBe("0");
+  });
+});
+
+describe("findCurrency", () => {
+  it("takes the minor units from the currencies list, and 2 for a code the list lacks", () => {
+    expect(findCurrency([rsd, jpy, kwd], "KWD")).toEqual(kwd);
+    expect(findCurrency([rsd], "JPY")).toEqual({ code: "JPY", minorUnits: 2 });
   });
 });

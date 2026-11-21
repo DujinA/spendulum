@@ -8,6 +8,7 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/category"
 	"github.com/DujinA/spendulum/backend/internal/entry"
+	"github.com/DujinA/spendulum/backend/internal/fx"
 	"github.com/DujinA/spendulum/backend/internal/httpapi/gen"
 	"github.com/DujinA/spendulum/backend/internal/httpapi/problem"
 	"github.com/DujinA/spendulum/backend/internal/settings"
@@ -25,6 +26,7 @@ type Deps struct {
 	Settings   settings.Handler
 	Categories category.Handler
 	Entries    entry.Handler
+	Currencies fx.Handler
 }
 
 // Embedded fields take their alias names, so each feature's Handler can be embedded.
@@ -32,6 +34,7 @@ type (
 	settingsHandler = settings.Handler
 	categoryHandler = category.Handler
 	entryHandler    = entry.Handler
+	currencyHandler = fx.Handler
 )
 
 type server struct {
@@ -40,6 +43,7 @@ type server struct {
 	settingsHandler
 	categoryHandler
 	entryHandler
+	currencyHandler
 }
 
 var _ gen.StrictServerInterface = server{}
@@ -48,7 +52,7 @@ func NewHandler(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	strict := gen.NewStrictHandlerWithOptions(
-		server{probes{db: d.DB, logger: d.Logger}, d.Auth, d.Settings, d.Categories, d.Entries},
+		server{probes{db: d.DB, logger: d.Logger}, d.Auth, d.Settings, d.Categories, d.Entries, d.Currencies},
 		nil,
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  requestError(d.Logger),

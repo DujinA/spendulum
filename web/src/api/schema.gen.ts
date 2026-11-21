@@ -72,6 +72,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The currencies an entry can be in
+         * @description Every currency the rate provider supports, by code, each with its ISO 4217 minor units.
+         */
+        get: operations["listCurrencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/entries": {
         parameters: {
             query?: never;
@@ -170,6 +190,12 @@ export interface components {
             primaryCurrency: string;
             /** @description The IANA time zone that decides "today". */
             timeZone: string;
+        };
+        Currency: {
+            /** @description The ISO 4217 code. */
+            code: string;
+            /** @description The digits after the decimal point; an amount in this currency is an integer of these units. */
+            minorUnits: number;
         };
         /** @enum {string} */
         Kind: "expense" | "income";
@@ -426,6 +452,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Category"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listCurrencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The supported currencies. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Currency"][];
                 };
             };
             401: components["responses"]["Unauthorized"];
