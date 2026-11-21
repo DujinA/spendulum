@@ -7,8 +7,7 @@ package gen
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 const currencies = `-- name: Currencies :many
@@ -36,12 +35,12 @@ func (q *Queries) Currencies(ctx context.Context) ([]Currency, error) {
 }
 
 const lastRateDate = `-- name: LastRateDate :one
-SELECT max(rate_date)::date AS rate_date FROM exchange_rates
+SELECT rate_date FROM exchange_rates ORDER BY rate_date DESC LIMIT 1
 `
 
-func (q *Queries) LastRateDate(ctx context.Context) (pgtype.Date, error) {
+func (q *Queries) LastRateDate(ctx context.Context) (time.Time, error) {
 	row := q.db.QueryRow(ctx, lastRateDate)
-	var rate_date pgtype.Date
+	var rate_date time.Time
 	err := row.Scan(&rate_date)
 	return rate_date, err
 }
@@ -55,12 +54,12 @@ ORDER BY currency, rate_date DESC
 
 type LatestRatesParams struct {
 	Currencies []string
-	OnDate     pgtype.Date
+	OnDate     time.Time
 }
 
 type LatestRatesRow struct {
 	Currency string
-	RateDate pgtype.Date
+	RateDate time.Time
 	PerEur   string
 }
 
@@ -91,19 +90,19 @@ ORDER BY rate_date
 `
 
 type RateDatesParams struct {
-	FromDate pgtype.Date
-	ToDate   pgtype.Date
+	FromDate time.Time
+	ToDate   time.Time
 }
 
-func (q *Queries) RateDates(ctx context.Context, arg RateDatesParams) ([]pgtype.Date, error) {
+func (q *Queries) RateDates(ctx context.Context, arg RateDatesParams) ([]time.Time, error) {
 	rows, err := q.db.Query(ctx, rateDates, arg.FromDate, arg.ToDate)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []pgtype.Date{}
+	items := []time.Time{}
 	for rows.Next() {
-		var rate_date pgtype.Date
+		var rate_date time.Time
 		if err := rows.Scan(&rate_date); err != nil {
 			return nil, err
 		}
@@ -139,7 +138,7 @@ ON CONFLICT (currency, rate_date) DO UPDATE SET per_eur = excluded.per_eur
 
 type SaveRatesParams struct {
 	Currencies []string
-	RateDates  []pgtype.Date
+	RateDates  []time.Time
 	PerEur     []string
 }
 

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { sessionQueryKey } from "@/api/session";
-import { testEmail, testPassword, tooManyLogins, fakeSessionApi } from "@/test/api";
+import { fakeEntriesApi, testEmail, testPassword, tooManyLogins, fakeSessionApi } from "@/test/api";
 import { renderApp } from "@/test/render";
 
 async function logIn(email = testEmail, password = testPassword) {
@@ -25,6 +25,7 @@ describe("login", () => {
 
   it("goes to the login screen without a session and returns to the original route after login", async () => {
     fakeSessionApi({ loggedIn: false });
+    fakeEntriesApi();
     const { router } = renderApp("/entries");
 
     expect(await screen.findByRole("heading", { level: 1, name: "Log in" })).toBeInTheDocument();

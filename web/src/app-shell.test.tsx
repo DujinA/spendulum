@@ -1,11 +1,12 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { fakeSessionApi } from "@/test/api";
+import { fakeEntriesApi, fakeSessionApi } from "@/test/api";
 import { renderApp } from "@/test/render";
 
 function renderAt(path: string) {
   fakeSessionApi({ loggedIn: true });
+  fakeEntriesApi();
   return renderApp(path).router;
 }
 
@@ -35,10 +36,18 @@ describe("app shell", () => {
     ["/entries", "Entries"],
     ["/new", "Add entry"],
     ["/more", "More"],
-  ])("renders the %s placeholder route", async (path, heading) => {
+  ])("renders the %s route", async (path, heading) => {
     renderAt(path);
 
     expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+  });
+
+  it("leaves the tab bar off the keypad screen, which has its own Cancel and Save", async () => {
+    renderAt("/new");
+
+    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Tabs" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Sidebar" })).toBeInTheDocument();
   });
 
   it("navigates when a tab is tapped and marks it current", async () => {

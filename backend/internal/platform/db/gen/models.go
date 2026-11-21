@@ -18,6 +18,7 @@ type Category struct {
 	Name      string
 	Position  int32
 	CreatedAt time.Time
+	Archived  bool
 }
 
 type Currency struct {
@@ -25,10 +26,30 @@ type Currency struct {
 	MinorUnits int16
 }
 
+type Entry struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Kind       string
+	Amount     int64
+	Currency   string
+	CategoryID uuid.UUID
+	EntryDate  time.Time
+	Note       string
+	CreatedAt  time.Time
+}
+
 type ExchangeRate struct {
 	Currency string
-	RateDate pgtype.Date
+	RateDate time.Time
 	PerEur   pgtype.Numeric
+}
+
+type IdempotencyKey struct {
+	UserID      uuid.UUID
+	Key         string
+	RequestHash []byte
+	EntryID     uuid.UUID
+	CreatedAt   time.Time
 }
 
 type Session struct {

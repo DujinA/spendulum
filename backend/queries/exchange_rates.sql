@@ -19,7 +19,7 @@ WHERE currency = ANY(CAST(@currencies::text[] AS bpchar[])) AND rate_date <= @on
 ORDER BY currency, rate_date DESC;
 
 -- name: LastRateDate :one
-SELECT max(rate_date)::date AS rate_date FROM exchange_rates;
+SELECT rate_date FROM exchange_rates ORDER BY rate_date DESC LIMIT 1;
 
 -- name: RateDates :many
 SELECT DISTINCT rate_date FROM exchange_rates

@@ -35,6 +35,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The user's settings */
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The categories a picker offers
+         * @description The user's categories that are not archived, expense categories first, each kind in manual order.
+         */
+        get: operations["listCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List entries
+         * @description All of the user's entries, newest entry date first; entries on the same
+         *     date are newest created first. Pass `nextCursor` from a page as `cursor`
+         *     to get the page after it.
+         */
+        get: operations["listEntries"];
+        put?: never;
+        /**
+         * Record an expense or an income
+         * @description Records the entry in the user's primary currency. An income amount must
+         *     be more than 0 and an expense amount must not be 0; a negative expense
+         *     is a refund. The note is stored trimmed.
+         *
+         *     A retry with the same `Idempotency-Key` and body answers the entry the
+         *     first request created, and creates no other. The same key with a
+         *     different body answers 422. Keys are kept for 24 hours.
+         */
+        post: operations["createEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/entries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One entry */
+        get: operations["getEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -79,6 +165,62 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Settings: {
+            /** @description The ISO 4217 code new entries are recorded in. */
+            primaryCurrency: string;
+            /** @description The IANA time zone that decides "today". */
+            timeZone: string;
+        };
+        /** @enum {string} */
+        Kind: "expense" | "income";
+        Category: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["Kind"];
+            name: string;
+        };
+        NewEntry: {
+            kind: components["schemas"]["Kind"];
+            /**
+             * Format: int64
+             * @description In minor units of the primary currency; negative only for a refund.
+             */
+            amount: number;
+            /**
+             * Format: uuid
+             * @description A category of the same kind.
+             */
+            categoryId: string;
+            /** Format: date */
+            entryDate: string;
+            note?: string;
+        };
+        Entry: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["Kind"];
+            /**
+             * Format: int64
+             * @description In minor units of `currency`, as typed; negative for a refund.
+             */
+            amount: number;
+            /** @description ISO 4217 code. */
+            currency: string;
+            /** Format: uuid */
+            categoryId: string;
+            categoryName: string;
+            /** Format: date */
+            entryDate: string;
+            /** @description Empty when the entry has no note. */
+            note: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        EntryPage: {
+            entries: components["schemas"]["Entry"][];
+            /** @description Absent on the last page. */
+            nextCursor?: string;
+        };
         Credentials: {
             email: string;
             password: string;
@@ -136,8 +278,29 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description No such resource, or it belongs to another user. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The request is well formed but breaks a rule; the detail says which. */
+        UnprocessableContent: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        /** @description A key the client makes when the form opens and sends again on every retry. */
+        IdempotencyKey: string;
+    };
     requestBodies: never;
     headers: {
         /** @description The `spendulum_session` cookie, `HttpOnly`, `Secure`, `SameSite=Lax`, with an explicit `Max-Age`. */
@@ -224,6 +387,131 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The user's settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The categories that are not archived. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listEntries: {
+        parameters: {
+            query?: {
+                /** @description The `nextCursor` of the previous page. */
+                cursor?: string;
+                /** @description The most entries a page holds. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of entries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A key the client makes when the form opens and sends again on every retry. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewEntry"];
+            };
+        };
+        responses: {
+            /** @description The entry was recorded, now or by an earlier request with the same key. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+        };
+    };
+    getEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getHealthz: {

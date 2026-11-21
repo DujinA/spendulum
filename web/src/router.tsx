@@ -10,10 +10,13 @@ import {
 import type { ReactNode } from "react";
 
 import { ApiError, type ApiClient } from "@/api/client";
+import { categoriesQuery, entriesQuery, settingsQuery } from "@/api/entries";
 import { sessionQuery } from "@/api/session";
 import { AppShell } from "@/components/app-shell";
+import { EntriesScreen } from "@/routes/entries";
 import { LoginScreen } from "@/routes/login";
 import { MoreScreen } from "@/routes/more";
+import { NewEntryScreen } from "@/routes/new-entry";
 import { Placeholder } from "@/routes/placeholder";
 
 export interface RouterContext {
@@ -56,12 +59,28 @@ const appRoute = createRoute({
   },
 });
 
+const entriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/entries",
+  component: EntriesScreen,
+  loader: ({ context: { queryClient, api } }) =>
+    Promise.all([queryClient.query(settingsQuery(api)), queryClient.infiniteQuery(entriesQuery(api))]),
+});
+
+const newEntryRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/new",
+  component: NewEntryScreen,
+  loader: ({ context: { queryClient, api } }) =>
+    Promise.all([queryClient.query(settingsQuery(api)), queryClient.query(categoriesQuery(api))]),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
     createRoute({ getParentRoute: () => appRoute, path: "/", component: () => <Placeholder title="Dashboard" /> }),
-    createRoute({ getParentRoute: () => appRoute, path: "/entries", component: () => <Placeholder title="Entries" /> }),
-    createRoute({ getParentRoute: () => appRoute, path: "/new", component: () => <Placeholder title="Add entry" /> }),
+    entriesRoute,
+    newEntryRoute,
     createRoute({ getParentRoute: () => appRoute, path: "/more", component: MoreScreen }),
   ]),
 ]);

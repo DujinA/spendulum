@@ -2,11 +2,12 @@ package fx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/DujinA/spendulum/backend/internal/platform/db/gen"
 )
@@ -50,7 +51,7 @@ func (p *Postgres) Currencies(ctx context.Context) ([]Currency, error) {
 func (p *Postgres) SaveRates(ctx context.Context, rates []Rate) error {
 	arg := gen.SaveRatesParams{
 		Currencies: make([]string, len(rates)),
-		RateDates:  make([]pgtype.Date, len(rates)),
+		RateDates:  make([]time.Time, len(rates)),
 		PerEur:     make([]string, len(rates)),
 	}
 
@@ -60,7 +61,7 @@ func (p *Postgres) SaveRates(ctx context.Context, rates []Rate) error {
 			return err
 		}
 
-		arg.Currencies[i], arg.RateDates[i], arg.PerEur[i] = r.Currency, pgDate(r.Date), perEUR
+		arg.Currencies[i], arg.RateDates[i], arg.PerEur[i] = r.Currency, civil(r.Date), perEUR
 	}
 
 	if err := p.q.SaveRates(ctx, arg); err != nil {
@@ -71,7 +72,7 @@ func (p *Postgres) SaveRates(ctx context.Context, rates []Rate) error {
 }
 
 func (p *Postgres) LatestRates(ctx context.Context, currencies []string, on time.Time) ([]Rate, error) {
-	rows, err := p.q.LatestRates(ctx, gen.LatestRatesParams{Currencies: currencies, OnDate: pgDate(on)})
+	rows, err := p.q.LatestRates(ctx, gen.LatestRatesParams{Currencies: currencies, OnDate: civil(on)})
 	if err != nil {
 		return nil, fmt.Errorf("fx: select latest rates: %w", err)
 	}
@@ -84,7 +85,7 @@ func (p *Postgres) LatestRates(ctx context.Context, currencies []string, on time
 			return nil, fmt.Errorf("fx: stored rate %q of %s is not a number", r.PerEur, r.Currency)
 		}
 
-		out[i] = Rate{Currency: r.Currency, Date: r.RateDate.Time, PerEUR: perEUR}
+		out[i] = Rate{Currency: r.Currency, Date: r.RateDate, PerEUR: perEUR}
 	}
 
 	return out, nil
@@ -92,29 +93,24 @@ func (p *Postgres) LatestRates(ctx context.Context, currencies []string, on time
 
 func (p *Postgres) LastRateDate(ctx context.Context) (time.Time, bool, error) {
 	d, err := p.q.LastRateDate(ctx)
-	if err != nil {
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return time.Time{}, false, nil
+	case err != nil:
 		return time.Time{}, false, fmt.Errorf("fx: select last rate date: %w", err)
 	}
 
-	return d.Time, d.Valid, nil
+	return d, true, nil
 }
 
 func (p *Postgres) RateDates(ctx context.Context, from, to time.Time) ([]time.Time, error) {
-	rows, err := p.q.RateDates(ctx, gen.RateDatesParams{FromDate: pgDate(from), ToDate: pgDate(to)})
+	dates, err := p.q.RateDates(ctx, gen.RateDatesParams{FromDate: civil(from), ToDate: civil(to)})
 	if err != nil {
 		return nil, fmt.Errorf("fx: select rate dates: %w", err)
 	}
 
-	out := make([]time.Time, len(rows))
-	for i, d := range rows {
-		out[i] = d.Time
-	}
-
-	return out, nil
-}
-
-func pgDate(t time.Time) pgtype.Date {
-	return pgtype.Date{Time: civil(t), Valid: true}
+	return dates, nil
 }
 
 // decimalText writes a rate without losing a digit; rates arrive as decimals, so their denominator is 2^a·5^b.
