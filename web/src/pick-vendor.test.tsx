@@ -164,6 +164,29 @@ describe("Vendor sheet", () => {
     expect(tile("Category")).toHaveTextContent("last time");
   });
 
+  it("drops a pending Enter once the user leaves the vendor empty", async () => {
+    fakeSessionApi({ loggedIn: true });
+    const fake = fakeEntriesApi({ vendors: { expense: [maxi] } });
+    const { queryClient } = renderApp("/new");
+    await screen.findByRole("group", { name: "Keypad" });
+    const sheet = await openSheet("Vendor");
+    await within(sheet).findByRole("button", { name: "Maxi" });
+
+    const release = fake.holdVendorSearches();
+    await userEvent.type(within(sheet).getByRole("searchbox", { name: "Search" }), "maxi{Enter}");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Leave vendor empty" }));
+    await closed(sheet);
+    release();
+    await waitFor(() => {
+      expect(queryClient.getQueryState(["vendors", "expense", "maxi"])?.status).toBe("success");
+    });
+
+    await waitFor(() => {
+      expect(tile("Vendor")).toHaveTextContent(/^VendorOptional$/);
+    });
+    expect(tile("Category")).toHaveTextContent(/^CategoryPick one$/);
+  });
+
   it("offers Did you mean with the near-matches, then No, create «Kafetrija», and creating never blocks", async () => {
     const fake = await openKeypad({ nearMatches: { Kafetrija: [kafeterija] } });
     await tapKeypad("5");

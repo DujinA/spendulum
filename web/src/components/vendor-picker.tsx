@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { useApi } from "@/api/context";
 import type { Kind } from "@/api/entries";
@@ -43,6 +43,24 @@ export function VendorPicker({
     placeholderData: keepPreviousData,
   });
   const didYouMeanId = useId();
+  // The first choice wins, so an answer to Enter that arrives after another choice or after closing is dropped.
+  const chosen = useRef(false);
+  useEffect(() => {
+    chosen.current = false;
+    return () => {
+      chosen.current = true;
+    };
+  }, []);
+  function choose<A extends unknown[]>(choice: (...args: A) => void) {
+    return (...args: A) => {
+      if (chosen.current) return;
+      chosen.current = true;
+      choice(...args);
+    };
+  }
+  const pick = choose(onPick);
+  const create = choose(onCreate);
+  const leaveEmpty = choose(onLeaveEmpty);
 
   const listed = data ? [...(data.match ? [data.match] : []), ...data.vendors] : [];
   const nearMatches = data?.nearMatches ?? [];
@@ -59,11 +77,11 @@ export function VendorPicker({
           // The results on screen may still be for an earlier name, so ask for this one's answer.
           queryClient.query({ ...vendorsQuery(api, kind, name), staleTime: "static" }).then(
             (answer) => {
-              if (answer.match) onPick(answer.match);
-              else onCreate(name);
+              if (answer.match) pick(answer.match);
+              else create(name);
             },
             () => {
-              onCreate(name);
+              create(name);
             },
           );
         }}
@@ -89,7 +107,7 @@ export function VendorPicker({
       <section aria-label="Results" aria-busy={isFetching || isPlaceholderData}>
         <button
           type="button"
-          onClick={onLeaveEmpty}
+          onClick={leaveEmpty}
           className="text-muted-foreground flex h-12 w-full items-center border-b px-4 text-left"
         >
           Leave {label.toLowerCase()} empty
@@ -98,7 +116,7 @@ export function VendorPicker({
         {listed.length > 0 && (
           <ul aria-label={`${label}s`}>
             {listed.map((vendor) => (
-              <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={onPick} />
+              <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={pick} />
             ))}
           </ul>
         )}
@@ -113,12 +131,12 @@ export function VendorPicker({
             </p>
             <ul aria-labelledby={didYouMeanId}>
               {nearMatches.map((vendor) => (
-                <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={onPick} />
+                <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={pick} />
               ))}
               <li>
                 <CreateButton
                   onClick={() => {
-                    onCreate(name);
+                    create(name);
                   }}
                 >
                   No, create «{name}»
@@ -131,7 +149,7 @@ export function VendorPicker({
         {offersCreate && nearMatches.length === 0 && (
           <CreateButton
             onClick={() => {
-              onCreate(name);
+              create(name);
             }}
           >
             Create "{name}"
