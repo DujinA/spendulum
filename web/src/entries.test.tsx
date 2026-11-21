@@ -113,6 +113,25 @@ describe("entry list", () => {
     expect(api.listRequests).toBe(3);
   });
 
+  it("keeps a refresh that is still fetching when the end of the list scrolls into view", async () => {
+    fakeSessionApi({ loggedIn: true });
+    const api = fakeEntriesApi({
+      pageSize: 2,
+      entries: ["2026-03-01", "2026-02-28", "2026-02-27"].map((entryDate) => fakeEntry({ entryDate })),
+    });
+    renderApp("/entries");
+    expect(await days()).toHaveLength(2);
+
+    api.entries.push(fakeEntry({ entryDate: "2026-03-02", note: "from another device" }));
+    const release = api.holdLists();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    scrollObservedIntoView();
+    release();
+
+    expect(await screen.findByText("from another device")).toBeInTheDocument();
+    expect(api.listRequests).toBe(2);
+  });
+
   it("refetches the list from the refresh control in the header", async () => {
     fakeSessionApi({ loggedIn: true });
     const api = fakeEntriesApi({ entries: [fakeEntry({ entryDate: "2026-03-01", note: "old" })] });

@@ -102,7 +102,19 @@ export function fakeEntriesApi({
     listRequests: 0,
     failLists: 0,
     failCreates: 0,
+    // Holds every list response until the returned function is called.
+    holdLists() {
+      let release: () => void = () => undefined;
+      held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        held = undefined;
+        release();
+      };
+    },
   };
+  let held: Promise<void> | undefined;
   const byKey = new Map<string, Entry>();
 
   const sorted = () =>
@@ -113,8 +125,9 @@ export function fakeEntriesApi({
   server.use(
     http.get("*/api/settings", () => HttpResponse.json<Settings>(settings)),
     http.get("*/api/categories", () => HttpResponse.json<Category[]>(categories)),
-    http.get<never, never, EntryPage | Problem>("*/api/entries", ({ request }) => {
+    http.get<never, never, EntryPage | Problem>("*/api/entries", async ({ request }) => {
       state.listRequests++;
+      await held;
       if (state.failLists > 0) {
         state.failLists--;
         return problem(503, "Service Unavailable", "");
