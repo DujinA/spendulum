@@ -26,9 +26,15 @@ func newAuthService(d *db.DB) *auth.Service {
 		Limiter: auth.NewLimiter(),
 		Defaults: []auth.AccountDefaults{
 			settings.NewService(settings.NewPostgres(q)),
-			category.NewService(category.NewPostgres(q)),
+			newCategoryService(d),
 		},
 	})
+}
+
+func newCategoryService(d *db.DB) *category.Service {
+	repo := category.NewPostgres(d.Queries())
+
+	return category.NewService(category.Deps{Repo: repo, Keys: repo, Tx: d})
 }
 
 func newAPIDeps(d *db.DB, cfg config.Config, logger *slog.Logger) httpapi.Deps {
@@ -41,7 +47,7 @@ func newAPIDeps(d *db.DB, cfg config.Config, logger *slog.Logger) httpapi.Deps {
 		Logger:     logger,
 		Auth:       auth.NewHandler(newAuthService(d), logger, cfg.CookieSecure, cfg.TrustedProxies),
 		Settings:   settings.NewHandler(settingsSvc),
-		Categories: category.NewHandler(category.NewService(category.NewPostgres(q))),
+		Categories: category.NewHandler(newCategoryService(d)),
 		Entries: entry.NewHandler(entry.NewService(entry.Deps{
 			Repo: entry.NewPostgres(q), Tx: d, Settings: settingsSvc,
 		}), logger),

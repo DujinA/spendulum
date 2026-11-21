@@ -60,16 +60,85 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The categories a picker offers
-         * @description The user's categories that are not archived, expense categories first, each kind in manual order.
+         * List categories
+         * @description The user's categories, expense categories first, each kind in manual
+         *     order. Archived categories are left out, as a picker needs, unless
+         *     `includeArchived` is true.
          */
         get: operations["listCategories"];
         put?: never;
+        /**
+         * Create a category
+         * @description Creates a category of the given kind at the end of that kind's manual
+         *     order. The kind never changes afterwards. Name and note are stored
+         *     trimmed.
+         *
+         *     Names are unique within a kind, compared by a key that ignores case,
+         *     diacritics, spaces and punctuation, so "kafici " is taken when
+         *     "Kafići" exists. A taken name answers 422, and its detail names the
+         *     existing category.
+         *
+         *     A retry with the same `Idempotency-Key` and body answers the category
+         *     the first request created. The same key with a different body answers
+         *     422. Keys are kept for 24 hours.
+         */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/categories/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the manual order of one kind
+         * @description `ids` lists every category of the kind, archived ones included, once
+         *     each, in the new order. A list that misses one, repeats one or holds
+         *     one of the other kind answers 422; an id that is not one of the user's
+         *     categories answers 404.
+         */
+        put: operations["reorderCategories"];
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a category that has no entries
+         * @description A category with entries, deleted entries included, cannot be deleted
+         *     and answers 409; archive it instead.
+         */
+        delete: operations["deleteCategory"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename, change the note of, archive or unarchive a category
+         * @description Changes only the fields sent. A rename follows the same unique-name
+         *     rule as creating. An archived category is left out of pickers and
+         *     stays on its entries. The kind cannot change.
+         */
+        patch: operations["updateCategory"];
         trace?: never;
     };
     "/api/currencies": {
@@ -204,6 +273,24 @@ export interface components {
             id: string;
             kind: components["schemas"]["Kind"];
             name: string;
+            /** @description Empty when the category has no note. */
+            note: string;
+            /** @description Left out of pickers, still on its entries. */
+            archived: boolean;
+        };
+        NewCategory: {
+            kind: components["schemas"]["Kind"];
+            name: string;
+            note?: string;
+        };
+        CategoryChange: {
+            name?: string;
+            note?: string;
+            archived?: boolean;
+        };
+        CategoryOrder: {
+            kind: components["schemas"]["Kind"];
+            ids: string[];
         };
         NewEntry: {
             kind: components["schemas"]["Kind"];
@@ -315,6 +402,15 @@ export interface components {
         };
         /** @description The request is well formed but breaks a rule; the detail says which. */
         UnprocessableContent: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The resource is in a state that does not allow this; the detail says why. */
+        Conflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -438,14 +534,17 @@ export interface operations {
     };
     listCategories: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also list archived categories. */
+                includeArchived?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The categories that are not archived. */
+            /** @description The categories. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -454,7 +553,122 @@ export interface operations {
                     "application/json": components["schemas"]["Category"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A key the client makes when the form opens and sends again on every retry. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewCategory"];
+            };
+        };
+        responses: {
+            /** @description The category was created, now or by an earlier request with the same key. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+        };
+    };
+    reorderCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryOrder"];
+            };
+        };
+        responses: {
+            /** @description The new order is saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+        };
+    };
+    deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The category is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryChange"];
+            };
+        };
+        responses: {
+            /** @description The category after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
         };
     };
     listCurrencies: {

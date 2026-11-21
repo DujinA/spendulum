@@ -104,20 +104,160 @@ paths:
   /api/categories:
     get:
       operationId: listCategories
-      summary: The categories a picker offers
-      description: The user's categories that are not archived, expense categories first, each kind in manual order.
+      summary: List categories
+      description: |
+        The user's categories, expense categories first, each kind in manual
+        order. Archived categories are left out, as a picker needs, unless
+        `includeArchived` is true.
       tags: [categories]
+      parameters:
+        - name: includeArchived
+          in: query
+          description: Also list archived categories.
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
-          description: The categories that are not archived.
+          description: The categories.
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createCategory
+      summary: Create a category
+      description: |
+        Creates a category of the given kind at the end of that kind's manual
+        order. The kind never changes afterwards. Name and note are stored
+        trimmed.
+
+        Names are unique within a kind, compared by a key that ignores case,
+        diacritics, spaces and punctuation, so "kafici " is taken when
+        "Kafići" exists. A taken name answers 422, and its detail names the
+        existing category.
+
+        A retry with the same `Idempotency-Key` and body answers the category
+        the first request created. The same key with a different body answers
+        422. Keys are kept for 24 hours.
+      tags: [categories]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewCategory"
+      responses:
+        "201":
+          description: The category was created, now or by an earlier request with the same key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+  /api/categories/order:
+    put:
+      operationId: reorderCategories
+      summary: Set the manual order of one kind
+      description: |
+        `ids` lists every category of the kind, archived ones included, once
+        each, in the new order. A list that misses one, repeats one or holds
+        one of the other kind answers 422; an id that is not one of the user's
+        categories answers 404.
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryOrder"
+      responses:
+        "204":
+          description: The new order is saved.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+  /api/categories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateCategory
+      summary: Rename, change the note of, archive or unarchive a category
+      description: |
+        Changes only the fields sent. A rename follows the same unique-name
+        rule as creating. An archived category is left out of pickers and
+        stays on its entries. The kind cannot change.
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryChange"
+      responses:
+        "200":
+          description: The category after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+    delete:
+      operationId: deleteCategory
+      summary: Delete a category that has no entries
+      description: |
+        A category with entries, deleted entries included, cannot be deleted
+        and answers 409; archive it instead.
+      tags: [categories]
+      responses:
+        "204":
+          description: The category is deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
   /api/currencies:
     get:
       operationId: listCurrencies
@@ -317,6 +457,12 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: The resource is in a state that does not allow this; the detail says why.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
     Settings:
       type: object
@@ -345,7 +491,7 @@ components:
       enum: [expense, income]
     Category:
       type: object
-      required: [id, kind, name]
+      required: [id, kind, name, note, archived]
       properties:
         id:
           type: string
@@ -354,6 +500,42 @@ components:
           $ref: "#/components/schemas/Kind"
         name:
           type: string
+        note:
+          type: string
+          description: Empty when the category has no note.
+        archived:
+          type: boolean
+          description: Left out of pickers, still on its entries.
+    NewCategory:
+      type: object
+      required: [kind, name]
+      properties:
+        kind:
+          $ref: "#/components/schemas/Kind"
+        name:
+          type: string
+        note:
+          type: string
+    CategoryChange:
+      type: object
+      properties:
+        name:
+          type: string
+        note:
+          type: string
+        archived:
+          type: boolean
+    CategoryOrder:
+      type: object
+      required: [kind, ids]
+      properties:
+        kind:
+          $ref: "#/components/schemas/Kind"
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
     NewEntry:
       type: object
       required: [kind, amount, categoryId, entryDate]
