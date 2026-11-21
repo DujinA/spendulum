@@ -1,8 +1,14 @@
 package main
 
 import (
+	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
 	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/category"
+	"github.com/DujinA/spendulum/backend/internal/fx"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/settings"
 )
@@ -20,4 +26,21 @@ func newAuthService(d *db.DB) *auth.Service {
 			category.NewService(category.NewPostgres(q)),
 		},
 	})
+}
+
+func newRateScheduler(d *db.DB, providerURL string, logger *slog.Logger) (*fx.Scheduler, error) {
+	svc := fx.NewService(fx.Deps{
+		Provider: fx.NewFrankfurter(providerURL, &http.Client{Timeout: time.Minute}),
+		Repo:     fx.NewPostgres(d.Queries()),
+		Entries:  noEntries{},
+	})
+
+	return fx.NewScheduler(svc, logger) //nolint:wrapcheck // the error names the fx package
+}
+
+// TODO(#29): replace with the entries adapter once the entries table exists.
+type noEntries struct{}
+
+func (noEntries) EarliestEntryDate(context.Context) (time.Time, bool, error) {
+	return time.Time{}, false, nil
 }

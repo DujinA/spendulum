@@ -13,6 +13,8 @@ var (
 	tableRef    = regexp.MustCompile(`(?i)\b(?:from|join|into|update)\s+(\w+)`)
 	userIDWhere = regexp.MustCompile(`(?is)\bwhere\b.*\buser_id\s*=`)
 	userIDCol   = regexp.MustCompile(`(?i)\buser_id\b`)
+	// ON CONFLICT ... DO UPDATE SET names no table; the INSERT before it does.
+	conflictUpdate = regexp.MustCompile(`(?i)\bdo\s+update\s+set\b`)
 )
 
 // A query may skip the user_id predicate only with a "-- unscoped: <reason>" line above its name.
@@ -71,9 +73,9 @@ func unscoped(q query) string {
 	}
 
 	// Tables with no user_id: shared data, and users, whose id is the user id (ADR 0009).
-	unscopedTables := map[string]bool{"users": true}
+	unscopedTables := map[string]bool{"users": true, "currencies": true, "exchange_rates": true}
 
-	for _, m := range tableRef.FindAllStringSubmatch(q.sql, -1) {
+	for _, m := range tableRef.FindAllStringSubmatch(conflictUpdate.ReplaceAllString(q.sql, ""), -1) {
 		table := strings.ToLower(m[1])
 		if unscopedTables[table] {
 			continue

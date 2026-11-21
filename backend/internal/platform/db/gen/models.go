@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Category struct {
@@ -17,6 +18,17 @@ type Category struct {
 	Name      string
 	Position  int32
 	CreatedAt time.Time
+}
+
+type Currency struct {
+	Code       string
+	MinorUnits int16
+}
+
+type ExchangeRate struct {
+	Currency string
+	RateDate pgtype.Date
+	PerEur   pgtype.Numeric
 }
 
 type Session struct {

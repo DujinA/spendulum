@@ -1,0 +1,9 @@
+[
+  {"iso_code":"BTC","iso_numeric":null,"name":"Bitcoin","symbol":"₿","type":"crypto","start_date":"2010-07-17","end_date":"2026-01-06"},
+  {"iso_code":"EUR","iso_numeric":"978","name":"Euro","symbol":"€","type":"currency","start_date":"1999-01-04","end_date":"2026-01-06"},
+  {"iso_code":"GBP","iso_numeric":"826","name":"British Pound","symbol":"£","type":"currency","start_date":"1999-01-04","end_date":"2026-01-06"},
+  {"iso_code":"JPY","iso_numeric":"392","name":"Japanese Yen","symbol":"¥","type":"currency","start_date":"1999-01-04","end_date":"2026-01-06"},
+  {"iso_code":"KWD","iso_numeric":"414","name":"Kuwaiti Dinar","symbol":"د.ك","type":"currency","start_date":"1999-01-04","end_date":"2026-01-06"},
+  {"iso_code":"RSD","iso_numeric":"941","name":"Serbian Dinar","symbol":"din","type":"currency","start_date":"2000-01-03","end_date":"2026-01-06"},
+  {"iso_code":"USD","iso_numeric":"840","name":"United States Dollar","symbol":"$","type":"currency","start_date":"1999-01-04","end_date":"2026-01-06"}
+]
