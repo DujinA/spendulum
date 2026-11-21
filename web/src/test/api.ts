@@ -126,6 +126,17 @@ export function fakeEntriesApi({
     entries: [...entries],
     creates: [] as CreateRequest[],
     vendorSearches: [] as { kind: string | null; name: string | null }[],
+    // Holds every vendor search response until the returned function is called.
+    holdVendorSearches() {
+      let release: () => void = () => undefined;
+      vendorsHeld = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        vendorsHeld = undefined;
+        release();
+      };
+    },
     listRequests: 0,
     failLists: 0,
     failCreates: 0,
@@ -142,6 +153,7 @@ export function fakeEntriesApi({
     },
   };
   let held: Promise<void> | undefined;
+  let vendorsHeld: Promise<void> | undefined;
   const byKey = new Map<string, Entry>();
 
   const sorted = () =>
@@ -152,7 +164,8 @@ export function fakeEntriesApi({
   server.use(
     http.get("*/api/settings", () => HttpResponse.json<Settings>(settings)),
     http.get("*/api/categories", () => HttpResponse.json<Category[]>(categories)),
-    http.get("*/api/vendors", ({ request }) => {
+    http.get("*/api/vendors", async ({ request }) => {
+      await vendorsHeld;
       const params = new URL(request.url).searchParams;
       const kind = params.get("kind");
       const name = params.get("name");
@@ -198,7 +211,7 @@ export function fakeEntriesApi({
       const entry = fakeEntry({
         kind: body.kind,
         amount: body.amount,
-        currency: body.currency ?? settings.primaryCurrency,
+        currency: settings.primaryCurrency,
         categoryId: body.categoryId,
         categoryName: category?.name ?? "",
         entryDate: body.entryDate,

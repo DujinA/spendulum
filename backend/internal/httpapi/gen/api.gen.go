@@ -116,12 +116,9 @@ type NewEntry struct {
 
 	// CategoryId A category of the same kind.
 	CategoryId openapi_types.UUID `json:"categoryId"`
-
-	// Currency ISO 4217 code. It must be the primary currency, which is also the default.
-	Currency  *string            `json:"currency,omitempty"`
-	EntryDate openapi_types.Date `json:"entryDate"`
-	Kind      Kind               `json:"kind"`
-	Note      *string            `json:"note,omitempty"`
+	EntryDate  openapi_types.Date `json:"entryDate"`
+	Kind       Kind               `json:"kind"`
+	Note       *string            `json:"note,omitempty"`
 
 	// VendorName Who the expense was paid to or the income came from. Absent or blank means no vendor.
 	VendorName *string `json:"vendorName,omitempty"`

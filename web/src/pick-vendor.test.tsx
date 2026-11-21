@@ -148,6 +148,22 @@ describe("Vendor sheet", () => {
     expect(fake.creates.map((c) => c.body.vendorName)).toEqual(["Maxi"]);
   });
 
+  it("waits for the answer for the typed name when Enter comes first, then picks its match", async () => {
+    const fake = await openKeypad();
+    const sheet = await openSheet("Vendor");
+    await within(sheet).findByRole("button", { name: "Maxi" });
+
+    const release = fake.holdVendorSearches();
+    await userEvent.type(within(sheet).getByRole("searchbox", { name: "Search" }), "maxi{Enter}");
+    expect(sheet).toBeInTheDocument();
+    release();
+    await closed(sheet);
+
+    expect(tile("Vendor")).toHaveTextContent(/^VendorMaxi$/);
+    expect(tile("Category")).toHaveTextContent("Groceries");
+    expect(tile("Category")).toHaveTextContent("last time");
+  });
+
   it("offers Did you mean with the near-matches, then No, create «Kafetrija», and creating never blocks", async () => {
     const fake = await openKeypad({ nearMatches: { Kafetrija: [kafeterija] } });
     await tapKeypad("5");
@@ -244,7 +260,7 @@ describe("Vendor sheet", () => {
 });
 
 describe("prefill from the picked vendor", () => {
-  it("fills the category and currency from the vendor's latest entry of the kind and marks the category last time", async () => {
+  it("fills the category from the vendor's latest entry of the kind, marks it last time, and keeps the primary currency", async () => {
     const fake = await openKeypad();
     await tapKeypad("5");
 
@@ -254,11 +270,11 @@ describe("prefill from the picked vendor", () => {
 
     expect(tile("Category")).toHaveTextContent("Eating out");
     expect(tile("Category")).toHaveTextContent("last time");
-    expect(screen.getByRole("status", { name: "Amount" })).toHaveTextContent(/^5\s*EUR$/);
+    expect(screen.getByRole("status", { name: "Amount" })).toHaveTextContent(/^5\s*din$/);
     await save();
 
     expect(fake.creates.map((c) => c.body)).toEqual([
-      expect.objectContaining({ categoryId: eatingOut.id, currency: "EUR", vendorName: "Kafeterija" }),
+      { kind: "expense", amount: 500, categoryId: eatingOut.id, vendorName: "Kafeterija", entryDate: "2026-03-02", note: "" },
     ]);
   });
 

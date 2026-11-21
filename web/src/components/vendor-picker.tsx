@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type ReactNode } from "react";
 
 import { useApi } from "@/api/context";
@@ -35,6 +35,7 @@ export function VendorPicker({
   onLeaveEmpty: () => void;
 }) {
   const api = useApi();
+  const queryClient = useQueryClient();
   const [typed, setTyped] = useState(initialName);
   const name = typed.trim();
   const { data, isFetching, isPlaceholderData } = useQuery({
@@ -54,9 +55,17 @@ export function VendorPicker({
         className="px-4"
         onSubmit={(event) => {
           event.preventDefault();
-          // A match shown while the next answer loads is for an earlier name; the server matches a created name by key anyway.
-          if (data?.match && !isPlaceholderData) onPick(data.match);
-          else if (name) onCreate(name);
+          if (!name) return;
+          // The results on screen may still be for an earlier name, so ask for this one's answer.
+          queryClient.query({ ...vendorsQuery(api, kind, name), staleTime: "static" }).then(
+            (answer) => {
+              if (answer.match) onPick(answer.match);
+              else onCreate(name);
+            },
+            () => {
+              onCreate(name);
+            },
+          );
         }}
       >
         <Input

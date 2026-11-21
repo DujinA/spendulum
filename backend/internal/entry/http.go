@@ -38,7 +38,6 @@ func (h Handler) CreateEntry(ctx context.Context, req gen.CreateEntryRequestObje
 	e, err := h.svc.Create(ctx, session.UserID, req.Params.IdempotencyKey, NewEntry{
 		Kind:       category.Kind(req.Body.Kind),
 		Amount:     req.Body.Amount,
-		Currency:   valueOf(req.Body.Currency),
 		CategoryID: req.Body.CategoryId,
 		VendorName: valueOf(req.Body.VendorName),
 		EntryDate:  req.Body.EntryDate.Time,

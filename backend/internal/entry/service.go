@@ -59,14 +59,14 @@ var errKeyHeld = errors.New("entry: idempotency key already held")
 
 // Create records the entry once per key: a retry with the same key and request answers the entry the first one created.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n NewEntry) (Entry, error) {
+	n, err := n.normalized()
+	if err != nil {
+		return Entry{}, err
+	}
+
 	st, err := s.d.Settings.Get(ctx, userID)
 	if err != nil {
 		return Entry{}, fmt.Errorf("entry: read settings: %w", err)
-	}
-
-	n, err = n.normalized(st.PrimaryCurrency)
-	if err != nil {
-		return Entry{}, err
 	}
 
 	id, err := uuid.NewV7()
@@ -77,7 +77,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n Ne
 	now := s.d.Now()
 	hash := n.fingerprint()
 	e := Entry{
-		ID: id, Kind: n.Kind, Amount: n.Amount, Currency: n.Currency,
+		ID: id, Kind: n.Kind, Amount: n.Amount, Currency: st.PrimaryCurrency,
 		CategoryID: n.CategoryID, EntryDate: n.EntryDate, Note: n.Note, CreatedAt: now,
 	}
 

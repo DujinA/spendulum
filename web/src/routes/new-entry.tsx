@@ -63,13 +63,13 @@ export function NewEntryScreen() {
   const [categoryId, setCategoryId] = useState<string>();
   // A category the user picked is never replaced; one from the vendor's latest entry shows "last time".
   const [categoryFrom, setCategoryFrom] = useState<"user" | "vendor">();
-  const [currency, setCurrency] = useState(settings.primaryCurrency);
   const [entryDate, setEntryDate] = useState(today);
   const [note, setNote] = useState("");
   const [sheet, setSheet] = useState<Sheet>();
   // Only a control reached with Tab keeps its own Enter; after a tap or click, Enter saves.
   const focusedByTab = useRef(false);
 
+  const currency = settings.primaryCurrency;
   const vendorLabel = kind === "income" ? "Source" : "Vendor";
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
@@ -79,7 +79,6 @@ export function NewEntryScreen() {
       ? {
           kind,
           amount: refund ? -magnitude : magnitude,
-          currency,
           categoryId: category.id,
           entryDate,
           note: note.trim(),
@@ -117,7 +116,6 @@ export function NewEntryScreen() {
   function pickVendor(picked: Vendor) {
     const { latest } = picked;
     setVendor({ name: picked.name, isNew: false });
-    if (latest) setCurrency(latest.currency);
     if (categoryFrom === "user") return;
     if (latest && kindCategories.some((c) => c.id === latest.categoryId)) {
       setCategoryId(latest.categoryId);

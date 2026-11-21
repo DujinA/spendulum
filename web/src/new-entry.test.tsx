@@ -69,7 +69,7 @@ describe("keypad screen", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Entries" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/entries");
     expect(api.creates.map((c) => c.body)).toEqual([
-      { kind: "expense", amount: 178080, currency: "RSD", categoryId: groceries.id, entryDate: "2026-03-02", note: "" },
+      { kind: "expense", amount: 178080, categoryId: groceries.id, entryDate: "2026-03-02", note: "" },
     ]);
 
     const days = await screen.findAllByRole("region");
@@ -242,7 +242,7 @@ describe("keypad screen", () => {
 
     await screen.findByRole("heading", { level: 1, name: "Entries" });
     expect(fake.creates.map((c) => c.body)).toEqual([
-      { kind: "expense", amount: -178080, currency: "RSD", categoryId: groceries.id, entryDate: "2026-03-02", note: "" },
+      { kind: "expense", amount: -178080, categoryId: groceries.id, entryDate: "2026-03-02", note: "" },
     ]);
   });
 

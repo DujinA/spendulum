@@ -282,18 +282,6 @@ func TestTheEntryListShowsEachEntrysVendor(t *testing.T) {
 	}
 }
 
-func TestAnEntryInAnotherCurrencyThanThePrimaryAnswers422(t *testing.T) {
-	a := newApp(t)
-	ana := a.owner(t, email)
-
-	euro := a.createEntry(t, ana, "eur", fmt.Sprintf(`{"kind":"expense","amount":100,"currency":"EUR","categoryId":%q,"entryDate":"2026-03-01"}`, ana.groceries))
-	assertStatus(t, euro, http.StatusUnprocessableEntity)
-	assertProblem(t, euro, http.StatusUnprocessableEntity)
-
-	dinar := a.createEntry(t, ana, "rsd", fmt.Sprintf(`{"kind":"expense","amount":100,"currency":"RSD","categoryId":%q,"entryDate":"2026-03-01"}`, ana.groceries))
-	assertStatus(t, dinar, http.StatusCreated)
-}
-
 func TestVendorsOfAnUnknownKindAnswer400(t *testing.T) {
 	a := newApp(t)
 	ana := a.owner(t, email)

@@ -223,8 +223,6 @@ export interface components {
              * @description In minor units of the primary currency; negative only for a refund.
              */
             amount: number;
-            /** @description ISO 4217 code. It must be the primary currency, which is also the default. */
-            currency?: string;
             /**
              * Format: uuid
              * @description A category of the same kind.

@@ -382,9 +382,6 @@ components:
           type: integer
           format: int64
           description: In minor units of the primary currency; negative only for a refund.
-        currency:
-          type: string
-          description: ISO 4217 code. It must be the primary currency, which is also the default.
         categoryId:
           type: string
           format: uuid

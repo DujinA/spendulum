@@ -124,20 +124,6 @@ func TestCreateRefusesAVendorNameWithoutALetterOrDigit(t *testing.T) {
 	}
 }
 
-func TestCreateTakesOnlyThePrimaryCurrency(t *testing.T) {
-	for currency, want := range map[string]error{"": nil, "RSD": nil, "EUR": entry.ErrCurrencyNotPrimary} {
-		repo := newFakeRepo()
-
-		got, err := newService(repo).Create(t.Context(), uuid.Must(uuid.NewV7()), "k", entry.NewEntry{
-			Kind: category.Expense, Amount: 100, Currency: currency, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(),
-		})
-
-		if !errors.Is(err, want) || (want == nil && got.Currency != "RSD") {
-			t.Errorf("Create in %q = %+v, %v; want %v", currency, got, err, want)
-		}
-	}
-}
-
 func TestTheSameKeyWithAnotherVendorIsADifferentRequest(t *testing.T) {
 	svc := newService(newFakeRepo())
 	user := uuid.Must(uuid.NewV7())
