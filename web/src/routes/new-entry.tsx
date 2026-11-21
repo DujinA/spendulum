@@ -245,6 +245,7 @@ export function NewEntryScreen() {
           label={vendorLabel}
           primaryCurrency={settings.primaryCurrency}
           initialName={vendor?.name ?? ""}
+          open={sheet === "vendor"}
           onPick={(picked) => {
             pickVendor(picked);
             setSheet(undefined);

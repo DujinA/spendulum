@@ -187,6 +187,39 @@ describe("Vendor sheet", () => {
     expect(tile("Category")).toHaveTextContent(/^CategoryPick one$/);
   });
 
+  it("drops a pending Enter once the sheet is dismissed, even while it animates out", async () => {
+    // The test setup turns Drawer animations off; with them on, jsdom keeps a closed sheet mounted as if animating out.
+    const noAnimation = [...document.head.querySelectorAll("style")].find((s) => s.textContent.includes("animation-name: none"));
+    noAnimation?.remove();
+    try {
+      fakeSessionApi({ loggedIn: true });
+      const fake = fakeEntriesApi({ vendors: { expense: [maxi] } });
+      const { queryClient } = renderApp("/new");
+      await screen.findByRole("group", { name: "Keypad" });
+      const sheet = await openSheet("Vendor");
+      await within(sheet).findByRole("button", { name: "Maxi" });
+
+      const release = fake.holdVendorSearches();
+      await userEvent.type(within(sheet).getByRole("searchbox", { name: "Search" }), "maxi{Enter}");
+      await userEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+      await waitFor(() => {
+        expect(sheet).toHaveAttribute("data-state", "closed");
+      });
+      expect(sheet).toBeInTheDocument();
+      release();
+      await waitFor(() => {
+        expect(queryClient.getQueryState(["vendors", "expense", "maxi"])?.status).toBe("success");
+      });
+
+      const vendorTile = screen.getByRole("button", { name: /^Vendor/, hidden: true });
+      await waitFor(() => {
+        expect(vendorTile).toHaveTextContent(/^VendorOptional$/);
+      });
+    } finally {
+      if (noAnimation) document.head.append(noAnimation);
+    }
+  });
+
   it("offers Did you mean with the near-matches, then No, create «Kafetrija», and creating never blocks", async () => {
     const fake = await openKeypad({ nearMatches: { Kafetrija: [kafeterija] } });
     await tapKeypad("5");

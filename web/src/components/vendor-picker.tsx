@@ -22,6 +22,7 @@ export function VendorPicker({
   label,
   primaryCurrency,
   initialName,
+  open,
   onPick,
   onCreate,
   onLeaveEmpty,
@@ -30,6 +31,8 @@ export function VendorPicker({
   label: string;
   primaryCurrency: string;
   initialName: string;
+  // The sheet stays mounted while it animates out, so closing it must drop a pending answer to Enter.
+  open: boolean;
   onPick: (vendor: Vendor) => void;
   onCreate: (name: string) => void;
   onLeaveEmpty: () => void;
@@ -46,11 +49,11 @@ export function VendorPicker({
   // The first choice wins, so an answer to Enter that arrives after another choice or after closing is dropped.
   const chosen = useRef(false);
   useEffect(() => {
-    chosen.current = false;
+    chosen.current = !open;
     return () => {
       chosen.current = true;
     };
-  }, []);
+  }, [open]);
   function choose<A extends unknown[]>(choice: (...args: A) => void) {
     return (...args: A) => {
       if (chosen.current) return;
