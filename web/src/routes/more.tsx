@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, LogOut, Shapes } from "lucide-react";
 
 import { useApi } from "@/api/context";
 import { logOut, sessionQuery } from "@/api/session";
@@ -21,8 +21,17 @@ export function MoreScreen() {
   });
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6 md:max-w-2xl">
       <h1 className="text-2xl font-semibold tracking-tight">More</h1>
+      <ul className="border-t">
+        <li>
+          <Link to="/more/categories" className="flex h-12 items-center gap-3 border-b font-medium">
+            <Shapes className="text-muted-foreground size-5" aria-hidden />
+            Categories
+            <ChevronRight className="text-muted-foreground ml-auto size-5" aria-hidden />
+          </Link>
+        </li>
+      </ul>
       <div className="flex flex-col gap-3">
         {session && <p className="text-muted-foreground text-sm">Logged in as {session.email}</p>}
         <Button

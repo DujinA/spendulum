@@ -9,10 +9,12 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { allCategoriesQuery } from "@/api/categories";
 import { ApiError, type ApiClient } from "@/api/client";
 import { categoriesQuery, entriesQuery, settingsQuery } from "@/api/entries";
 import { sessionQuery } from "@/api/session";
 import { AppShell } from "@/components/app-shell";
+import { CategoriesScreen } from "@/routes/categories";
 import { EntriesScreen } from "@/routes/entries";
 import { LoginScreen } from "@/routes/login";
 import { MoreScreen } from "@/routes/more";
@@ -75,6 +77,13 @@ const newEntryRoute = createRoute({
     Promise.all([queryClient.query(settingsQuery(api)), queryClient.query(categoriesQuery(api))]),
 });
 
+const categoriesRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/more/categories",
+  component: CategoriesScreen,
+  loader: ({ context: { queryClient, api } }) => queryClient.query(allCategoriesQuery(api)),
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -82,6 +91,7 @@ const routeTree = rootRoute.addChildren([
     entriesRoute,
     newEntryRoute,
     createRoute({ getParentRoute: () => appRoute, path: "/more", component: MoreScreen }),
+    categoriesRoute,
   ]),
 ]);
 
