@@ -60,6 +60,8 @@ func (n NewEntry) normalized() (NewEntry, error) {
 		return NewEntry{}, ErrIncomeNotPositive
 	case n.Kind == category.Expense && n.Amount == 0:
 		return NewEntry{}, ErrExpenseZero
+	case n.Amount < -9007199254740991 || n.Amount > 9007199254740991:
+		return NewEntry{}, RuleError("The amount is outside the supported range.")
 	case n.CategoryID == uuid.Nil:
 		return NewEntry{}, ErrCategoryRequired
 	case n.EntryDate.IsZero():
