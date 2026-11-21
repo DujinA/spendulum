@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Category struct {
@@ -18,6 +19,16 @@ type Category struct {
 	Position  int32
 	CreatedAt time.Time
 	Archived  bool
+	Note      string
+	NameKey   pgtype.Text
+}
+
+type CategoryIdempotencyKey struct {
+	UserID      uuid.UUID
+	Key         string
+	RequestHash []byte
+	CategoryID  uuid.UUID
+	CreatedAt   time.Time
 }
 
 type Entry struct {

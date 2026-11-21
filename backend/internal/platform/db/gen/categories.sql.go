@@ -7,18 +7,20 @@ package gen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const categories = `-- name: Categories :many
-SELECT id, kind, name, position, archived FROM categories WHERE user_id = $1 ORDER BY kind, position, created_at
+SELECT id, kind, name, note, position, archived FROM categories WHERE user_id = $1 ORDER BY kind, position, created_at
 `
 
 type CategoriesRow struct {
 	ID       uuid.UUID
 	Kind     string
 	Name     string
+	Note     string
 	Position int32
 	Archived bool
 }
@@ -36,6 +38,7 @@ func (q *Queries) Categories(ctx context.Context, userID uuid.UUID) ([]Categorie
 			&i.ID,
 			&i.Kind,
 			&i.Name,
+			&i.Note,
 			&i.Position,
 			&i.Archived,
 		); err != nil {
@@ -49,8 +52,95 @@ func (q *Queries) Categories(ctx context.Context, userID uuid.UUID) ([]Categorie
 	return items, nil
 }
 
+const category = `-- name: Category :one
+SELECT id, kind, name, note, position, archived FROM categories WHERE user_id = $1 AND id = $2
+`
+
+type CategoryParams struct {
+	UserID uuid.UUID
+	ID     uuid.UUID
+}
+
+type CategoryRow struct {
+	ID       uuid.UUID
+	Kind     string
+	Name     string
+	Note     string
+	Position int32
+	Archived bool
+}
+
+func (q *Queries) Category(ctx context.Context, arg CategoryParams) (CategoryRow, error) {
+	row := q.db.QueryRow(ctx, category, arg.UserID, arg.ID)
+	var i CategoryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Name,
+		&i.Note,
+		&i.Position,
+		&i.Archived,
+	)
+	return i, err
+}
+
+const categoryByNameKey = `-- name: CategoryByNameKey :one
+SELECT id, kind, name, note, position, archived FROM categories WHERE user_id = $1 AND kind = $2 AND name_key = $3::text
+`
+
+type CategoryByNameKeyParams struct {
+	UserID  uuid.UUID
+	Kind    string
+	NameKey string
+}
+
+type CategoryByNameKeyRow struct {
+	ID       uuid.UUID
+	Kind     string
+	Name     string
+	Note     string
+	Position int32
+	Archived bool
+}
+
+func (q *Queries) CategoryByNameKey(ctx context.Context, arg CategoryByNameKeyParams) (CategoryByNameKeyRow, error) {
+	row := q.db.QueryRow(ctx, categoryByNameKey, arg.UserID, arg.Kind, arg.NameKey)
+	var i CategoryByNameKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Name,
+		&i.Note,
+		&i.Position,
+		&i.Archived,
+	)
+	return i, err
+}
+
+const categoryIdempotencyKey = `-- name: CategoryIdempotencyKey :one
+SELECT request_hash, category_id FROM category_idempotency_keys WHERE user_id = $1 AND key = $2
+`
+
+type CategoryIdempotencyKeyParams struct {
+	UserID uuid.UUID
+	Key    string
+}
+
+type CategoryIdempotencyKeyRow struct {
+	RequestHash []byte
+	CategoryID  uuid.UUID
+}
+
+func (q *Queries) CategoryIdempotencyKey(ctx context.Context, arg CategoryIdempotencyKeyParams) (CategoryIdempotencyKeyRow, error) {
+	row := q.db.QueryRow(ctx, categoryIdempotencyKey, arg.UserID, arg.Key)
+	var i CategoryIdempotencyKeyRow
+	err := row.Scan(&i.RequestHash, &i.CategoryID)
+	return i, err
+}
+
 const createCategory = `-- name: CreateCategory :exec
-INSERT INTO categories (id, user_id, kind, name, position, archived) VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO categories (id, user_id, kind, name, name_key, note, position, archived)
+VALUES ($1, $2, $3, $4, $5::text, $6, $7, $8)
 `
 
 type CreateCategoryParams struct {
@@ -58,6 +148,8 @@ type CreateCategoryParams struct {
 	UserID   uuid.UUID
 	Kind     string
 	Name     string
+	NameKey  string
+	Note     string
 	Position int32
 	Archived bool
 }
@@ -68,20 +160,98 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.UserID,
 		arg.Kind,
 		arg.Name,
+		arg.NameKey,
+		arg.Note,
 		arg.Position,
 		arg.Archived,
 	)
 	return err
 }
 
+const createCategoryIdempotencyKey = `-- name: CreateCategoryIdempotencyKey :execrows
+INSERT INTO category_idempotency_keys (user_id, key, request_hash, category_id, created_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, key) DO NOTHING
+`
+
+type CreateCategoryIdempotencyKeyParams struct {
+	UserID      uuid.UUID
+	Key         string
+	RequestHash []byte
+	CategoryID  uuid.UUID
+	CreatedAt   time.Time
+}
+
+func (q *Queries) CreateCategoryIdempotencyKey(ctx context.Context, arg CreateCategoryIdempotencyKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createCategoryIdempotencyKey,
+		arg.UserID,
+		arg.Key,
+		arg.RequestHash,
+		arg.CategoryID,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteCategory = `-- name: DeleteCategory :execrows
+DELETE FROM categories WHERE user_id = $1 AND id = $2
+`
+
+type DeleteCategoryParams struct {
+	UserID uuid.UUID
+	ID     uuid.UUID
+}
+
+func (q *Queries) DeleteCategory(ctx context.Context, arg DeleteCategoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteCategory, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteExpiredCategoryIdempotencyKeys = `-- name: DeleteExpiredCategoryIdempotencyKeys :exec
+DELETE FROM category_idempotency_keys WHERE user_id = $1 AND created_at <= $2
+`
+
+type DeleteExpiredCategoryIdempotencyKeysParams struct {
+	UserID    uuid.UUID
+	CreatedAt time.Time
+}
+
+func (q *Queries) DeleteExpiredCategoryIdempotencyKeys(ctx context.Context, arg DeleteExpiredCategoryIdempotencyKeysParams) error {
+	_, err := q.db.Exec(ctx, deleteExpiredCategoryIdempotencyKeys, arg.UserID, arg.CreatedAt)
+	return err
+}
+
+const setCategoryOrder = `-- name: SetCategoryOrder :exec
+UPDATE categories SET position = o.n - 1
+FROM unnest($2::uuid[]) WITH ORDINALITY AS o (id, n)
+WHERE categories.user_id = $1 AND categories.id = o.id
+`
+
+type SetCategoryOrderParams struct {
+	UserID uuid.UUID
+	Ids    []uuid.UUID
+}
+
+func (q *Queries) SetCategoryOrder(ctx context.Context, arg SetCategoryOrderParams) error {
+	_, err := q.db.Exec(ctx, setCategoryOrder, arg.UserID, arg.Ids)
+	return err
+}
+
 const unarchivedCategories = `-- name: UnarchivedCategories :many
-SELECT id, kind, name, position, archived FROM categories WHERE user_id = $1 AND NOT archived ORDER BY kind, position, created_at
+SELECT id, kind, name, note, position, archived FROM categories WHERE user_id = $1 AND NOT archived ORDER BY kind, position, created_at
 `
 
 type UnarchivedCategoriesRow struct {
 	ID       uuid.UUID
 	Kind     string
 	Name     string
+	Note     string
 	Position int32
 	Archived bool
 }
@@ -99,6 +269,7 @@ func (q *Queries) UnarchivedCategories(ctx context.Context, userID uuid.UUID) ([
 			&i.ID,
 			&i.Kind,
 			&i.Name,
+			&i.Note,
 			&i.Position,
 			&i.Archived,
 		); err != nil {
@@ -110,4 +281,33 @@ func (q *Queries) UnarchivedCategories(ctx context.Context, userID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCategory = `-- name: UpdateCategory :execrows
+UPDATE categories SET name = $1, name_key = $2::text, note = $3, archived = $4
+WHERE user_id = $5 AND id = $6
+`
+
+type UpdateCategoryParams struct {
+	Name     string
+	NameKey  string
+	Note     string
+	Archived bool
+	UserID   uuid.UUID
+	ID       uuid.UUID
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateCategory,
+		arg.Name,
+		arg.NameKey,
+		arg.Note,
+		arg.Archived,
+		arg.UserID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
