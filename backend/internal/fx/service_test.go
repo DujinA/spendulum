@@ -198,6 +198,38 @@ func TestBackfillOverWeekendsItAlreadyStoredAsksTheProviderNothing(t *testing.T)
 	}
 }
 
+func TestBackfillThroughTodayFillsTheDaysBeforeLaterStoredRates(t *testing.T) {
+	f := newFixture()
+	f.storeRSDDaily(t, "2026-01-12", "2026-01-20")
+
+	own := map[string]string{"2026-01-06": "117.06", "2026-01-07": "117.07", "2026-01-08": "117.08", "2026-01-09": "117.09"}
+	for d, perEUR := range own {
+		f.provider.rates = append(f.provider.rates, rate(t, "RSD", d, perEUR))
+	}
+
+	f.provider.requests = nil
+
+	if err := f.svc.Backfill(t.Context(), day(t, "2026-01-01"), day(t, "2026-01-20")); err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+
+	want := []request{{day(t, "2025-12-25"), day(t, "2026-01-11")}}
+	if got := f.provider.madeRequests(); !reflect.DeepEqual(got, want) {
+		t.Errorf("rate requests = %v, want %v", got, want)
+	}
+
+	for d, perEUR := range own {
+		got, err := f.svc.Convert(t.Context(), 100, "EUR", "RSD", day(t, d))
+		if err != nil {
+			t.Fatalf("Convert on %s: %v", d, err)
+		}
+
+		if want := new(big.Rat).Mul(rat(t, perEUR), big.NewRat(100, 1)); got.Amount.Cmp(want) != 0 || !got.RateDate.Equal(day(t, d)) || got.Provisional {
+			t.Errorf("1.00 EUR in RSD on %s = %+v, want %s at its own rate, not provisional", d, got, want.RatString())
+		}
+	}
+}
+
 func TestConvertKeepsUsingStoredRatesWhileTheProviderFails(t *testing.T) {
 	f := newFixture()
 	f.provider.rates = []fx.Rate{rate(t, "RSD", "2026-01-05", "117.5")}

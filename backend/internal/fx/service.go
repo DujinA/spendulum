@@ -73,16 +73,16 @@ func (s *Service) Sync(ctx context.Context, today time.Time) error {
 	return s.fetch(ctx, []dateRange{{from: from, to: today}})
 }
 
-// Backfill fetches the dates in [from, to] that no stored rate covers; import apply calls it for its entry dates.
-func (s *Service) Backfill(ctx context.Context, from, to time.Time) error {
-	from, to = civil(from), civil(to)
+// Backfill runs through today, never to an earlier end, so the lookback never hides a hole; import apply passes its earliest entry date.
+func (s *Service) Backfill(ctx context.Context, from, today time.Time) error {
+	from, today = civil(from), civil(today)
 
-	have, err := s.d.Repo.RateDates(ctx, from.AddDate(0, 0, -lookbackDays), to)
+	have, err := s.d.Repo.RateDates(ctx, from.AddDate(0, 0, -lookbackDays), today)
 	if err != nil {
 		return fmt.Errorf("fx: stored rate dates: %w", err)
 	}
 
-	gaps := missing(have, from, to)
+	gaps := missing(have, from, today)
 	if len(gaps) == 0 {
 		return nil
 	}
