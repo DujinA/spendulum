@@ -14,7 +14,10 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/db/gen"
 )
 
-const foreignKeyViolation = "23503"
+const (
+	foreignKeyViolation = "23503"
+	categoryForeignKey  = "entries_user_id_category_id_kind_fkey"
+)
 
 type Postgres struct {
 	q *gen.Queries
@@ -34,11 +37,16 @@ func (p *Postgres) DeleteExpiredKeys(ctx context.Context, userID uuid.UUID, crea
 }
 
 func (p *Postgres) Create(ctx context.Context, userID uuid.UUID, e Entry) error {
+	var vendorID *uuid.UUID
+	if e.VendorID != uuid.Nil {
+		vendorID = &e.VendorID
+	}
+
 	err := p.q.CreateEntry(ctx, gen.CreateEntryParams{
 		ID: e.ID, UserID: userID, Kind: string(e.Kind), Amount: e.Amount, Currency: e.Currency,
-		CategoryID: e.CategoryID, EntryDate: e.EntryDate, Note: e.Note, CreatedAt: e.CreatedAt,
+		CategoryID: e.CategoryID, VendorID: vendorID, EntryDate: e.EntryDate, Note: e.Note, CreatedAt: e.CreatedAt,
 	})
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == foreignKeyViolation {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == foreignKeyViolation && pgErr.ConstraintName == categoryForeignKey {
 		return ErrUnknownCategory
 	}
 
@@ -116,8 +124,14 @@ func (p *Postgres) List(ctx context.Context, userID uuid.UUID, after *Cursor, li
 }
 
 func fromRow(r gen.EntriesRow) Entry {
-	return Entry{
+	e := Entry{
 		ID: r.ID, Kind: category.Kind(r.Kind), Amount: r.Amount, Currency: r.Currency, CategoryID: r.CategoryID,
 		CategoryName: r.CategoryName, EntryDate: r.EntryDate, Note: r.Note, CreatedAt: r.CreatedAt,
 	}
+
+	if r.VendorID != nil && r.VendorName != nil {
+		e.VendorID, e.VendorName = *r.VendorID, *r.VendorName
+	}
+
+	return e
 }

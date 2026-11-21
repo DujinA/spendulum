@@ -23,6 +23,10 @@ type Repository interface {
 	List(ctx context.Context, userID uuid.UUID, after *Cursor, limit int) ([]Entry, error)
 }
 
+type Vendors interface {
+	Use(ctx context.Context, userID uuid.UUID, name string) (uuid.UUID, error)
+}
+
 type Transactor interface {
 	InTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -33,6 +37,7 @@ type Settings interface {
 
 type Deps struct {
 	Repo     Repository
+	Vendors  Vendors
 	Tx       Transactor
 	Settings Settings
 	Now      func() time.Time
@@ -54,14 +59,14 @@ var errKeyHeld = errors.New("entry: idempotency key already held")
 
 // Create records the entry once per key: a retry with the same key and request answers the entry the first one created.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n NewEntry) (Entry, error) {
-	n, err := n.normalized()
-	if err != nil {
-		return Entry{}, err
-	}
-
 	st, err := s.d.Settings.Get(ctx, userID)
 	if err != nil {
 		return Entry{}, fmt.Errorf("entry: read settings: %w", err)
+	}
+
+	n, err = n.normalized(st.PrimaryCurrency)
+	if err != nil {
+		return Entry{}, err
 	}
 
 	id, err := uuid.NewV7()
@@ -72,7 +77,7 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n Ne
 	now := s.d.Now()
 	hash := n.fingerprint()
 	e := Entry{
-		ID: id, Kind: n.Kind, Amount: n.Amount, Currency: st.PrimaryCurrency,
+		ID: id, Kind: n.Kind, Amount: n.Amount, Currency: n.Currency,
 		CategoryID: n.CategoryID, EntryDate: n.EntryDate, Note: n.Note, CreatedAt: now,
 	}
 
@@ -80,6 +85,15 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n Ne
 	err = s.d.Tx.InTx(ctx, func(ctx context.Context) error {
 		if err := s.d.Repo.DeleteExpiredKeys(ctx, userID, now.Add(-KeyLifetime)); err != nil {
 			return err //nolint:wrapcheck // wrapped below
+		}
+
+		if n.VendorName != "" {
+			vendorID, err := s.d.Vendors.Use(ctx, userID, n.VendorName)
+			if err != nil {
+				return err //nolint:wrapcheck // wrapped below
+			}
+
+			e.VendorID = vendorID
 		}
 
 		if err := s.d.Repo.Create(ctx, userID, e); err != nil {

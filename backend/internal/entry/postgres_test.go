@@ -12,6 +12,8 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/entry"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/platform/db/dbtest"
+	"github.com/DujinA/spendulum/backend/internal/platform/namekey"
+	"github.com/DujinA/spendulum/backend/internal/vendors"
 )
 
 func TestMain(m *testing.M) { dbtest.Main(m) }
@@ -52,6 +54,17 @@ func (f fixture) entry(t *testing.T, userID, categoryID uuid.UUID, date string, 
 	}
 
 	return e
+}
+
+func (f fixture) vendor(t *testing.T, userID uuid.UUID, name string) uuid.UUID {
+	t.Helper()
+
+	id, err := vendors.NewPostgres(f.d.Queries()).Use(t.Context(), userID, vendors.Vendor{ID: uuid.Must(uuid.NewV7()), Name: name, Key: namekey.Of(name)})
+	if err != nil {
+		t.Fatalf("create vendor: %v", err)
+	}
+
+	return id
 }
 
 func day(t *testing.T, date string) time.Time {
@@ -159,6 +172,43 @@ func TestAnEntryNeedsACategoryOfTheSameUserAndKind(t *testing.T) {
 				t.Errorf("Create = %v, want ErrUnknownCategory", err)
 			}
 		})
+	}
+}
+
+func TestAnEntryIsReadBackWithItsVendorName(t *testing.T) {
+	f := newFixture(t)
+	user := dbtest.NewUser(t, f.d.Queries())
+	maxi := f.vendor(t, user, "Maxi")
+	e := entry.Entry{
+		ID: uuid.Must(uuid.NewV7()), Kind: category.Expense, Amount: 1000, Currency: "RSD", VendorID: maxi,
+		CategoryID: f.category(t, user, category.Expense, "Groceries"), EntryDate: day(t, "2026-03-02"), CreatedAt: time.Now(),
+	}
+
+	if err := f.repo.Create(t.Context(), user, e); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	without := f.entry(t, user, e.CategoryID, "2026-03-01", time.Now())
+
+	if got, err := f.repo.Get(t.Context(), user, e.ID); err != nil || got.VendorID != maxi || got.VendorName != "Maxi" {
+		t.Errorf("Get = %+v, %v; want vendor Maxi %v", got, err, maxi)
+	}
+
+	if got, err := f.repo.Get(t.Context(), user, without.ID); err != nil || got.VendorID != uuid.Nil || got.VendorName != "" {
+		t.Errorf("Get = %+v, %v; want no vendor", got, err)
+	}
+}
+
+func TestAnEntryNeverNamesAnotherUsersVendor(t *testing.T) {
+	f := newFixture(t)
+	a, b := dbtest.NewUser(t, f.d.Queries()), dbtest.NewUser(t, f.d.Queries())
+	e := entry.Entry{
+		ID: uuid.Must(uuid.NewV7()), Kind: category.Expense, Amount: 1000, Currency: "RSD", VendorID: f.vendor(t, b, "Maxi"),
+		CategoryID: f.category(t, a, category.Expense, "Groceries"), EntryDate: day(t, "2026-03-02"), CreatedAt: time.Now(),
+	}
+
+	if err := f.repo.Create(t.Context(), a, e); err == nil || errors.Is(err, entry.ErrUnknownCategory) {
+		t.Errorf("Create with B's vendor = %v, want a refusal that is not about the category", err)
 	}
 }
 

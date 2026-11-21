@@ -23,6 +23,7 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/platform/db/dbtest"
 	"github.com/DujinA/spendulum/backend/internal/settings"
+	"github.com/DujinA/spendulum/backend/internal/vendors"
 	"github.com/DujinA/spendulum/backend/internal/webui"
 )
 
@@ -57,6 +58,7 @@ func newApp(t *testing.T, opts ...appOption) *app {
 	logger := slog.New(slog.NewJSONHandler(a.logs, nil))
 	settingsSvc := settings.NewService(settings.NewPostgres(d.Queries()))
 	categorySvc := category.NewService(category.NewPostgres(d.Queries()))
+	vendorSvc := vendors.NewService(vendors.NewPostgres(d.Queries()))
 
 	a.auth = auth.NewService(auth.Deps{
 		Repo:     auth.NewPostgres(d.Queries()),
@@ -74,8 +76,9 @@ func newApp(t *testing.T, opts ...appOption) *app {
 		Auth:       auth.NewHandler(a.auth, logger, true, []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16")}),
 		Settings:   settings.NewHandler(settingsSvc),
 		Categories: category.NewHandler(categorySvc),
+		Vendors:    vendors.NewHandler(vendorSvc),
 		Entries: entry.NewHandler(entry.NewService(entry.Deps{
-			Repo: entry.NewPostgres(d.Queries()), Tx: d, Settings: settingsSvc, Now: a.clock,
+			Repo: entry.NewPostgres(d.Queries()), Vendors: vendorSvc, Tx: d, Settings: settingsSvc, Now: a.clock,
 		}), logger),
 	}
 	for _, o := range opts {

@@ -11,6 +11,7 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/httpapi/gen"
 	"github.com/DujinA/spendulum/backend/internal/httpapi/problem"
 	"github.com/DujinA/spendulum/backend/internal/settings"
+	"github.com/DujinA/spendulum/backend/internal/vendors"
 )
 
 type Pinger interface {
@@ -24,6 +25,7 @@ type Deps struct {
 	Auth       auth.Handler
 	Settings   settings.Handler
 	Categories category.Handler
+	Vendors    vendors.Handler
 	Entries    entry.Handler
 }
 
@@ -31,6 +33,7 @@ type Deps struct {
 type (
 	settingsHandler = settings.Handler
 	categoryHandler = category.Handler
+	vendorsHandler  = vendors.Handler
 	entryHandler    = entry.Handler
 )
 
@@ -39,6 +42,7 @@ type server struct {
 	auth.Handler
 	settingsHandler
 	categoryHandler
+	vendorsHandler
 	entryHandler
 }
 
@@ -48,7 +52,7 @@ func NewHandler(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	strict := gen.NewStrictHandlerWithOptions(
-		server{probes{db: d.DB, logger: d.Logger}, d.Auth, d.Settings, d.Categories, d.Entries},
+		server{probes{db: d.DB, logger: d.Logger}, d.Auth, d.Settings, d.Categories, d.Vendors, d.Entries},
 		nil,
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  requestError(d.Logger),

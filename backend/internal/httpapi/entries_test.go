@@ -32,6 +32,7 @@ type pageJSON struct {
 
 // owner is a logged-in user with an expense category "Groceries" and the default Other categories.
 type owner struct {
+	id        uuid.UUID
 	cookie    *http.Cookie
 	groceries uuid.UUID
 	salary    uuid.UUID
@@ -44,7 +45,7 @@ func (a *app) owner(t *testing.T, email string) owner {
 	groceries := a.addCategory(t, id, category.Category{Kind: category.Expense, Name: "Groceries", Position: 1})
 	salary := a.addCategory(t, id, category.Category{Kind: category.Income, Name: "Salary", Position: 1})
 
-	return owner{cookie: a.loginAs(t, email), groceries: groceries.ID, salary: salary.ID}
+	return owner{id: id, cookie: a.loginAs(t, email), groceries: groceries.ID, salary: salary.ID}
 }
 
 func expenseJSON(categoryID uuid.UUID, amount int64, date, note string) string {

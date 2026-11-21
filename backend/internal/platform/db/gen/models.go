@@ -30,6 +30,7 @@ type Entry struct {
 	EntryDate  time.Time
 	Note       string
 	CreatedAt  time.Time
+	VendorID   *uuid.UUID
 }
 
 type IdempotencyKey struct {
@@ -59,4 +60,13 @@ type User struct {
 	Email        string
 	PasswordHash string
 	CreatedAt    time.Time
+}
+
+type Vendor struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Name      string
+	Key       string
+	Archived  bool
+	CreatedAt time.Time
 }
