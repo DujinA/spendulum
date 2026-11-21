@@ -26,6 +26,8 @@
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-border: oklch(0.922 0 0);
+  --income: oklch(0.488 0.13 250);
+  --refund: oklch(0.555 0.13 55);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,6 +53,8 @@
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
+    --income: oklch(0.76 0.1 245);
+    --refund: oklch(0.78 0.12 65);
   }
 }
 
@@ -80,6 +84,8 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-income: var(--income);
+  --color-refund: var(--refund);
 }
 
 @layer base {

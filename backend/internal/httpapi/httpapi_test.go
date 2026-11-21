@@ -48,7 +48,7 @@ func TestUnknownAPIPathWithASessionAnswers404ProblemJSON(t *testing.T) {
 	a.account(t)
 	c := a.login(t)
 
-	for _, path := range []string{"/api", "/api/", "/api/nope", "/api/entries/123"} {
+	for _, path := range []string{"/api", "/api/", "/api/nope", "/api/nope/123"} {
 		t.Run(path, func(t *testing.T) {
 			res := a.do(t, request{path: path, cookie: c})
 

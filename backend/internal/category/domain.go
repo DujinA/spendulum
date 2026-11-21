@@ -17,4 +17,5 @@ type Category struct {
 	Kind     Kind
 	Name     string
 	Position int
+	Archived bool
 }

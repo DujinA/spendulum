@@ -6,8 +6,11 @@ import (
 	"net/http"
 
 	"github.com/DujinA/spendulum/backend/internal/auth"
+	"github.com/DujinA/spendulum/backend/internal/category"
+	"github.com/DujinA/spendulum/backend/internal/entry"
 	"github.com/DujinA/spendulum/backend/internal/httpapi/gen"
 	"github.com/DujinA/spendulum/backend/internal/httpapi/problem"
+	"github.com/DujinA/spendulum/backend/internal/settings"
 )
 
 type Pinger interface {
@@ -15,15 +18,28 @@ type Pinger interface {
 }
 
 type Deps struct {
-	DB     Pinger
-	WebUI  http.Handler
-	Logger *slog.Logger
-	Auth   auth.Handler
+	DB         Pinger
+	WebUI      http.Handler
+	Logger     *slog.Logger
+	Auth       auth.Handler
+	Settings   settings.Handler
+	Categories category.Handler
+	Entries    entry.Handler
 }
+
+// Embedded fields take their alias names, so each feature's Handler can be embedded.
+type (
+	settingsHandler = settings.Handler
+	categoryHandler = category.Handler
+	entryHandler    = entry.Handler
+)
 
 type server struct {
 	probes
 	auth.Handler
+	settingsHandler
+	categoryHandler
+	entryHandler
 }
 
 var _ gen.StrictServerInterface = server{}
@@ -32,7 +48,7 @@ func NewHandler(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	strict := gen.NewStrictHandlerWithOptions(
-		server{probes{db: d.DB, logger: d.Logger}, d.Auth},
+		server{probes{db: d.DB, logger: d.Logger}, d.Auth, d.Settings, d.Categories, d.Entries},
 		nil,
 		gen.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  requestError(d.Logger),

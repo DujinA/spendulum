@@ -10,6 +10,7 @@ import (
 type Repository interface {
 	Create(ctx context.Context, userID uuid.UUID, c Category) error
 	List(ctx context.Context, userID uuid.UUID) ([]Category, error)
+	ListUnarchived(ctx context.Context, userID uuid.UUID) ([]Category, error)
 }
 
 type Service struct {
@@ -18,6 +19,11 @@ type Service struct {
 
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// Unarchived lists what a picker offers: expense categories first, each kind in manual order.
+func (s *Service) Unarchived(ctx context.Context, userID uuid.UUID) ([]Category, error) {
+	return s.repo.ListUnarchived(ctx, userID) //nolint:wrapcheck // the repository already says what failed
 }
 
 func (s *Service) CreateDefaults(ctx context.Context, userID uuid.UUID) error {

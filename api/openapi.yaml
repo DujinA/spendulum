@@ -87,6 +87,131 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+  /api/settings:
+    get:
+      operationId: getSettings
+      summary: The user's settings
+      tags: [settings]
+      responses:
+        "200":
+          description: The user's settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/categories:
+    get:
+      operationId: listCategories
+      summary: The categories a picker offers
+      description: The user's categories that are not archived, expense categories first, each kind in manual order.
+      tags: [categories]
+      responses:
+        "200":
+          description: The categories that are not archived.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/entries:
+    get:
+      operationId: listEntries
+      summary: List entries
+      description: |
+        All of the user's entries, newest entry date first; entries on the same
+        date are newest created first. Pass `nextCursor` from a page as `cursor`
+        to get the page after it.
+      tags: [entries]
+      parameters:
+        - name: cursor
+          in: query
+          description: The `nextCursor` of the previous page.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: The most entries a page holds.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: A page of entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createEntry
+      summary: Record an expense or an income
+      description: |
+        Records the entry in the user's primary currency. An income amount must
+        be more than 0 and an expense amount must not be 0; a negative expense
+        is a refund. The note is stored trimmed.
+
+        A retry with the same `Idempotency-Key` and body answers the entry the
+        first request created, and creates no other. The same key with a
+        different body answers 422. Keys are kept for 24 hours.
+      tags: [entries]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewEntry"
+      responses:
+        "201":
+          description: The entry was recorded, now or by an earlier request with the same key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+  /api/entries/{id}:
+    get:
+      operationId: getEntry
+      summary: One entry
+      tags: [entries]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /healthz:
     get:
       operationId: getHealthz
@@ -134,6 +259,16 @@ components:
       required: true
       schema:
         type: string
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A key the client makes when the form opens and sends again on every retry.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
   responses:
     BadRequest:
       description: The request is malformed.
@@ -153,7 +288,103 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No such resource, or it belongs to another user.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnprocessableContent:
+      description: The request is well formed but breaks a rule; the detail says which.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
+    Settings:
+      type: object
+      required: [primaryCurrency, timeZone]
+      properties:
+        primaryCurrency:
+          type: string
+          description: The ISO 4217 code new entries are recorded in.
+        timeZone:
+          type: string
+          description: The IANA time zone that decides "today".
+    Kind:
+      type: string
+      enum: [expense, income]
+    Category:
+      type: object
+      required: [id, kind, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/Kind"
+        name:
+          type: string
+    NewEntry:
+      type: object
+      required: [kind, amount, categoryId, entryDate]
+      properties:
+        kind:
+          $ref: "#/components/schemas/Kind"
+        amount:
+          type: integer
+          format: int64
+          description: In minor units of the primary currency; negative only for a refund.
+        categoryId:
+          type: string
+          format: uuid
+          description: A category of the same kind.
+        entryDate:
+          type: string
+          format: date
+        note:
+          type: string
+    Entry:
+      type: object
+      required: [id, kind, amount, currency, categoryId, categoryName, entryDate, note, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/Kind"
+        amount:
+          type: integer
+          format: int64
+          description: In minor units of `currency`, as typed; negative for a refund.
+        currency:
+          type: string
+          description: ISO 4217 code.
+        categoryId:
+          type: string
+          format: uuid
+        categoryName:
+          type: string
+        entryDate:
+          type: string
+          format: date
+        note:
+          type: string
+          description: Empty when the entry has no note.
+        createdAt:
+          type: string
+          format: date-time
+    EntryPage:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entry"
+        nextCursor:
+          type: string
+          description: Absent on the last page.
     Credentials:
       type: object
       required: [email, password]
