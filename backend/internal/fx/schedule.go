@@ -13,7 +13,7 @@ const (
 	maxRetry   = time.Hour
 )
 
-// Scheduler syncs in-process: a backfill at startup, then the newest rates daily at 17:00 Europe/Berlin.
+// Scheduler backfills and syncs in-process: at startup, then daily at 17:00 Europe/Berlin.
 type Scheduler struct {
 	svc    *Service
 	logger *slog.Logger
@@ -32,13 +32,22 @@ func NewScheduler(svc *Service, logger *slog.Logger) (*Scheduler, error) {
 func (s *Scheduler) Run(ctx context.Context) {
 	next := s.nextRun(time.Now())
 
-	s.untilDone(ctx, "startup backfill", next, s.svc.BackfillFromEarliestEntry)
+	s.untilDone(ctx, "startup", next, s.backfillAndSync)
 
 	for sleepUntil(ctx, next) {
 		after := s.nextRun(next)
-		s.untilDone(ctx, "daily sync", after, s.svc.Sync)
+		s.untilDone(ctx, "daily", after, s.backfillAndSync)
 		next = after
 	}
+}
+
+// Every run backfills first, so history that a failed startup left missing is filled at the next run.
+func (s *Scheduler) backfillAndSync(ctx context.Context, today time.Time) error {
+	if err := s.svc.BackfillFromEarliestEntry(ctx, today); err != nil {
+		return err
+	}
+
+	return s.svc.Sync(ctx, today)
 }
 
 // untilDone retries a failed run with doubling waits, and leaves the rest to the run scheduled at deadline.

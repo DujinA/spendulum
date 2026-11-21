@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/DujinA/spendulum/backend/internal/fx"
 )
@@ -89,23 +90,21 @@ func TestStartupBackfillFetchesWhatIsMissingFromTheEarliestEntryDateToToday(t *t
 	f := newFixture()
 	f.entries.earliest = day(t, "2026-01-01")
 	f.storeRSDDaily(t, "2026-01-04", "2026-01-06")
-	f.provider.rates = []fx.Rate{rate(t, "RSD", "2026-01-01", "117.3"), rate(t, "RSD", "2026-01-08", "117.9")}
+	f.provider.rates = []fx.Rate{rate(t, "RSD", "2026-01-01", "117.3")}
 	f.provider.requests = nil
 
 	if err := f.svc.BackfillFromEarliestEntry(t.Context(), day(t, "2026-01-10")); err != nil {
 		t.Fatalf("BackfillFromEarliestEntry: %v", err)
 	}
 
-	want := []request{
-		{day(t, "2026-01-01"), day(t, "2026-01-03")},
-		{day(t, "2026-01-07"), day(t, "2026-01-10")},
-	}
+	// 01-07 to 01-10 fall within 7 days of the rate of 01-06, so only 01-01 to 01-03 are missing.
+	want := []request{{day(t, "2025-12-25"), day(t, "2026-01-03")}}
 	if got := f.provider.madeRequests(); !reflect.DeepEqual(got, want) {
 		t.Errorf("rate requests = %v, want %v", got, want)
 	}
 
-	if !f.repo.has("RSD", day(t, "2026-01-01")) || !f.repo.has("RSD", day(t, "2026-01-08")) {
-		t.Error("the backfilled rates of 2026-01-01 and 2026-01-08 were not stored")
+	if !f.repo.has("RSD", day(t, "2026-01-01")) {
+		t.Error("the backfilled rate of 2026-01-01 was not stored")
 	}
 }
 
@@ -116,7 +115,7 @@ func TestStartupBackfillWithNoEntryCoversToday(t *testing.T) {
 		t.Fatalf("BackfillFromEarliestEntry: %v", err)
 	}
 
-	want := []request{{day(t, "2026-01-10"), day(t, "2026-01-10")}}
+	want := []request{{day(t, "2026-01-03"), day(t, "2026-01-10")}}
 	if got := f.provider.madeRequests(); !reflect.DeepEqual(got, want) {
 		t.Errorf("rate requests = %v, want %v", got, want)
 	}
@@ -146,13 +145,56 @@ func TestBackfillOfARangeFetchesItInRequestsOfAtMost92Days(t *testing.T) {
 	}
 
 	want := []request{
-		{day(t, "2025-01-01"), day(t, "2025-04-02")},
-		{day(t, "2025-04-03"), day(t, "2025-07-03")},
-		{day(t, "2025-07-04"), day(t, "2025-10-03")},
-		{day(t, "2025-10-04"), day(t, "2025-12-31")},
+		{day(t, "2024-12-25"), day(t, "2025-03-26")},
+		{day(t, "2025-03-27"), day(t, "2025-06-26")},
+		{day(t, "2025-06-27"), day(t, "2025-09-26")},
+		{day(t, "2025-09-27"), day(t, "2025-12-27")},
+		{day(t, "2025-12-28"), day(t, "2025-12-31")},
 	}
 	if got := f.provider.madeRequests(); !reflect.DeepEqual(got, want) {
 		t.Errorf("rate requests = %v, want %v", got, want)
+	}
+}
+
+func TestBackfillStartingOnAWeekendStoresTheRateBeforeIt(t *testing.T) {
+	f := newFixture()
+	f.provider.rates = []fx.Rate{rate(t, "RSD", "2026-01-02", "117.1"), rate(t, "RSD", "2026-01-05", "117.5")}
+
+	if err := f.svc.Backfill(t.Context(), day(t, "2026-01-03"), day(t, "2026-01-05")); err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+
+	got, err := f.svc.Convert(t.Context(), 100, "EUR", "RSD", day(t, "2026-01-03"))
+	if err != nil {
+		t.Fatalf("Convert on Saturday 2026-01-03: %v", err)
+	}
+
+	if got.Amount.Cmp(big.NewRat(11710, 1)) != 0 || !got.RateDate.Equal(day(t, "2026-01-02")) || got.Provisional {
+		t.Errorf("1.00 EUR in RSD on Saturday = %+v, want 11710 at Friday's rate, not provisional", got)
+	}
+}
+
+func TestBackfillOverWeekendsItAlreadyStoredAsksTheProviderNothing(t *testing.T) {
+	f := newFixture()
+
+	for d := day(t, "2026-01-01"); d.Before(day(t, "2026-02-01")); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			f.provider.rates = append(f.provider.rates, fx.Rate{Currency: "RSD", Date: d, PerEUR: big.NewRat(1175, 10)})
+		}
+	}
+
+	if err := f.svc.Backfill(t.Context(), day(t, "2026-01-01"), day(t, "2026-01-31")); err != nil {
+		t.Fatalf("first Backfill: %v", err)
+	}
+
+	before := len(f.provider.callTimes()) + len(f.provider.madeRequests())
+
+	if err := f.svc.Backfill(t.Context(), day(t, "2026-01-01"), day(t, "2026-01-31")); err != nil {
+		t.Fatalf("second Backfill: %v", err)
+	}
+
+	if calls := len(f.provider.callTimes()) + len(f.provider.madeRequests()) - before; calls != 0 {
+		t.Errorf("the second backfill asked the provider %d times, want 0", calls)
 	}
 }
 

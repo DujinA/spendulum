@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math/big"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,8 +30,8 @@ func TestTheDailySyncFetchesTheNewestRatesAt1700Berlin(t *testing.T) {
 			utc(t, "2000-01-01T16:00:00Z"),
 			utc(t, "2000-01-02T16:00:00Z"),
 		}
-		if got := f.provider.callTimes(); !reflect.DeepEqual(got, want) {
-			t.Errorf("provider asked at %v, want %v", got, want)
+		if got := slices.Compact(f.provider.callTimes()); !reflect.DeepEqual(got, want) {
+			t.Errorf("runs at %v, want %v", got, want)
 		}
 
 		if got := f.provider.madeRequests(); got[len(got)-1].to != day(t, "2000-01-02") {
@@ -49,7 +51,7 @@ func TestTheDailySyncFollowsBerlinSummerTime(t *testing.T) {
 			utc(t, "2000-03-26T15:00:00Z"), // summer time started at 02:00 that night
 			utc(t, "2000-03-27T15:00:00Z"),
 		}
-		if got := f.provider.callTimes(); !reflect.DeepEqual(got[len(got)-3:], want) {
+		if got := slices.Compact(f.provider.callTimes()); !reflect.DeepEqual(got[len(got)-3:], want) {
 			t.Errorf("last three syncs at %v, want %v", got[len(got)-3:], want)
 		}
 	})
@@ -96,8 +98,40 @@ func TestAFailedSyncRetriesWithBackoffUntilTheNextScheduledRunAndIsLogged(t *tes
 	})
 }
 
+func TestTheDailyRunBackfillsTheHistoryAFailedStartupLeftMissing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture()
+		f.entries.earliest = day(t, "1999-12-01")
+
+		for d := day(t, "1999-11-20"); !d.After(day(t, "2000-01-01")); d = d.AddDate(0, 0, 1) {
+			f.provider.rates = append(f.provider.rates, fx.Rate{Currency: "RSD", Date: d, PerEUR: big.NewRat(1175, 10)})
+		}
+
+		f.provider.fail(errProviderDown)
+		stop := startScheduler(t, f)
+
+		time.Sleep(15*time.Hour + 30*time.Minute) // after the last startup retry, at 15:03 UTC
+		f.provider.fail(nil)
+		time.Sleep(time.Hour) // past the 17:00 Berlin run
+		stop()
+
+		if _, err := f.svc.Convert(t.Context(), 100, "EUR", "RSD", day(t, "1999-12-01")); err != nil {
+			t.Errorf("Convert on the earliest entry date after the 17:00 run: %v", err)
+		}
+	})
+}
+
 // runScheduler runs the scheduler for d of bubble time, stops it, and returns what it logged.
 func runScheduler(t *testing.T, f *fixture, d time.Duration) *logBuffer {
+	t.Helper()
+
+	stop := startScheduler(t, f)
+	time.Sleep(d)
+
+	return stop()
+}
+
+func startScheduler(t *testing.T, f *fixture) (stop func() *logBuffer) {
 	t.Helper()
 
 	logs := &logBuffer{}
@@ -115,11 +149,12 @@ func runScheduler(t *testing.T, f *fixture, d time.Duration) *logBuffer {
 		close(done)
 	}()
 
-	time.Sleep(d)
-	cancel()
-	<-done
+	return func() *logBuffer {
+		cancel()
+		<-done
 
-	return logs
+		return logs
+	}
 }
 
 type logBuffer struct {

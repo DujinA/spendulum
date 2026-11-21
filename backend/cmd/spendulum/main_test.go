@@ -220,7 +220,8 @@ func TestServeFetchesRatesOnlyFromTheConfiguredProvider(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := startServe(ctx, env)
 
-	want := []string{"/v2/currencies", "/v2/rates"}
+	// The startup run backfills, then syncs: currencies and rates, twice.
+	want := []string{"/v2/currencies", "/v2/rates", "/v2/currencies", "/v2/rates"}
 
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
 		mu.Lock()
@@ -243,7 +244,7 @@ func TestServeFetchesRatesOnlyFromTheConfiguredProvider(t *testing.T) {
 	defer mu.Unlock()
 
 	if !slices.Equal(paths, want) {
-		t.Errorf("the startup backfill asked the configured provider for %v, want %v:\n%s", paths, want, res.out)
+		t.Errorf("the startup run asked the configured provider for %v, want %v:\n%s", paths, want, res.out)
 	}
 }
 

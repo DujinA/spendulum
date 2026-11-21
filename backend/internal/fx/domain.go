@@ -182,22 +182,32 @@ func (r dateRange) chunks(maxDays int) []dateRange {
 	return out
 }
 
-// missing returns the runs of days in [from, to] that are not in have.
+// A stored rate covers the days after it up to lookbackDays, past any weekend or holiday (the longest ECB closure is 4 days).
+const lookbackDays = 7
+
+// missing returns the runs of days in [from, to] that no rate in have covers, each starting lookbackDays early so the fetch also brings the rate before it.
 func missing(have []time.Time, from, to time.Time) []dateRange {
 	stored := make(map[time.Time]bool, len(have))
 	for _, d := range have {
 		stored[civil(d)] = true
 	}
 
-	var out []dateRange
+	var (
+		out    []dateRange
+		latest time.Time
+	)
 
-	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+	for d := from.AddDate(0, 0, -lookbackDays); !d.After(to); d = d.AddDate(0, 0, 1) {
+		if stored[d] {
+			latest = d
+		}
+
 		switch n := len(out); {
-		case stored[d]:
+		case d.Before(from), !latest.IsZero() && !d.After(latest.AddDate(0, 0, lookbackDays)):
 		case n > 0 && out[n-1].to.Equal(d.AddDate(0, 0, -1)):
 			out[n-1].to = d
 		default:
-			out = append(out, dateRange{from: d, to: d})
+			out = append(out, dateRange{from: d.AddDate(0, 0, -lookbackDays), to: d})
 		}
 	}
 
