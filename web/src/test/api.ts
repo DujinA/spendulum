@@ -53,6 +53,9 @@ type Category = components["schemas"]["Category"];
 type Entry = components["schemas"]["Entry"];
 type NewEntry = components["schemas"]["NewEntry"];
 type EntryPage = components["schemas"]["EntryPage"];
+type Kind = components["schemas"]["Kind"];
+type Vendor = components["schemas"]["Vendor"];
+type VendorMatches = components["schemas"]["VendorMatches"];
 
 export const groceries: Category = { id: "0195f3a0-0000-7000-8000-000000000001", kind: "expense", name: "Groceries" };
 export const eatingOut: Category = { id: "0195f3a0-0000-7000-8000-000000000002", kind: "expense", name: "Eating out" };
@@ -65,6 +68,27 @@ export interface FakeEntriesOptions {
   categories?: Category[];
   entries?: Entry[];
   pageSize?: number;
+  // Each kind's vendors as the server ranks them, with that kind's use.
+  vendors?: Partial<Record<Kind, Vendor[]>>;
+  // The server's near-matches for a typed name; the fake does not compute them.
+  nearMatches?: Record<string, Vendor[]>;
+}
+
+let nextVendorId = 1;
+
+export function fakeVendor(fields: Partial<Vendor> & Pick<Vendor, "name">): Vendor {
+  const id = `0195f3a2-0000-7000-8000-${String(nextVendorId++).padStart(12, "0")}`;
+  return { id, archived: false, useCount: 0, ...fields };
+}
+
+// A stand-in for the server's name key: lowercase, no diacritics, letters and digits only.
+function nameKey(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 export interface CreateRequest {
@@ -95,10 +119,13 @@ export function fakeEntriesApi({
   categories = [groceries, eatingOut, otherExpense, salary, otherIncome],
   entries = [],
   pageSize = 50,
+  vendors = {},
+  nearMatches = {},
 }: FakeEntriesOptions = {}) {
   const state = {
     entries: [...entries],
     creates: [] as CreateRequest[],
+    vendorSearches: [] as { kind: string | null; name: string | null }[],
     listRequests: 0,
     failLists: 0,
     failCreates: 0,
@@ -125,6 +152,22 @@ export function fakeEntriesApi({
   server.use(
     http.get("*/api/settings", () => HttpResponse.json<Settings>(settings)),
     http.get("*/api/categories", () => HttpResponse.json<Category[]>(categories)),
+    http.get("*/api/vendors", ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const kind = params.get("kind");
+      const name = params.get("name");
+      state.vendorSearches.push({ kind, name });
+
+      const key = nameKey(name ?? "");
+      const all = kind === "expense" || kind === "income" ? (vendors[kind] ?? []) : [];
+      const match = key ? all.find((v) => nameKey(v.name) === key) : undefined;
+      const body: VendorMatches = {
+        vendors: all.filter((v) => v !== match && !v.archived && nameKey(v.name).includes(key)),
+        nearMatches: match ? [] : (nearMatches[name?.trim() ?? ""] ?? []),
+      };
+      if (match) body.match = match;
+      return HttpResponse.json<VendorMatches>(body);
+    }),
     http.get<never, never, EntryPage | Problem>("*/api/entries", async ({ request }) => {
       state.listRequests++;
       await held;
@@ -155,13 +198,22 @@ export function fakeEntriesApi({
       const entry = fakeEntry({
         kind: body.kind,
         amount: body.amount,
-        currency: settings.primaryCurrency,
+        currency: body.currency ?? settings.primaryCurrency,
         categoryId: body.categoryId,
         categoryName: category?.name ?? "",
         entryDate: body.entryDate,
         note: body.note?.trim() ?? "",
         createdAt: new Date().toISOString(),
       });
+      const vendorName = body.vendorName?.trim();
+      if (vendorName) {
+        const known = Object.values(vendors)
+          .flat()
+          .find((v) => nameKey(v.name) === nameKey(vendorName));
+        const vendor = known ?? fakeVendor({ name: vendorName });
+        entry.vendorId = vendor.id;
+        entry.vendorName = vendor.name;
+      }
       state.entries.push(entry);
       if (idempotencyKey !== null) byKey.set(idempotencyKey, entry);
       return HttpResponse.json<Entry>(entry, { status: 201 });

@@ -116,15 +116,16 @@ function DaySection({ label, entries }: { label: string; entries: Entry[] }) {
 
 function EntryRow({ entry }: { entry: Entry }) {
   const isRefund = entry.amount < 0;
+  const details = [entry.vendorName ? entry.categoryName : "", entry.note].filter((part) => part !== "").join(" · ");
   return (
     <li className="flex min-h-14 items-center gap-3 border-b py-2">
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{entry.categoryName}</p>
-        {(isRefund || entry.note) && (
+        <p className="truncate font-medium">{entry.vendorName ?? entry.categoryName}</p>
+        {(isRefund || details) && (
           <p className="text-muted-foreground truncate text-sm">
             {isRefund && <span className="text-refund font-medium">Refund</span>}
-            {isRefund && entry.note && " · "}
-            {entry.note}
+            {isRefund && details && " · "}
+            {details}
           </p>
         )}
       </div>
