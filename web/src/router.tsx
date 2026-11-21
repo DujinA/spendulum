@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 
 import { allCategoriesQuery } from "@/api/categories";
 import { ApiError, type ApiClient } from "@/api/client";
-import { categoriesQuery, entriesQuery, settingsQuery } from "@/api/entries";
+import { categoriesQuery, currenciesQuery, entriesQuery, settingsQuery } from "@/api/entries";
 import { sessionQuery } from "@/api/session";
 import { AppShell } from "@/components/app-shell";
 import { CategoriesScreen } from "@/routes/categories";
@@ -66,7 +66,11 @@ const entriesRoute = createRoute({
   path: "/entries",
   component: EntriesScreen,
   loader: ({ context: { queryClient, api } }) =>
-    Promise.all([queryClient.query(settingsQuery(api)), queryClient.infiniteQuery(entriesQuery(api))]),
+    Promise.all([
+      queryClient.query(settingsQuery(api)),
+      queryClient.query(currenciesQuery(api)),
+      queryClient.infiniteQuery(entriesQuery(api)),
+    ]),
 });
 
 const newEntryRoute = createRoute({
@@ -74,7 +78,11 @@ const newEntryRoute = createRoute({
   path: "/new",
   component: NewEntryScreen,
   loader: ({ context: { queryClient, api } }) =>
-    Promise.all([queryClient.query(settingsQuery(api)), queryClient.query(categoriesQuery(api))]),
+    Promise.all([
+      queryClient.query(settingsQuery(api)),
+      queryClient.query(currenciesQuery(api)),
+      queryClient.query(categoriesQuery(api)),
+    ]),
 });
 
 const categoriesRoute = createRoute({

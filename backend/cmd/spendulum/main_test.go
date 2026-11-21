@@ -5,6 +5,8 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -127,8 +129,9 @@ func TestServeExitsWhenMigrationsArePending(t *testing.T) {
 func TestServeOnAMigratedDatabaseIsReady(t *testing.T) {
 	addr := freeAddr(t)
 	env := map[string]string{
-		"SPENDULUM_DATABASE_URL": dbtest.NewDatabase(t),
-		"SPENDULUM_HTTP_ADDR":    addr,
+		"SPENDULUM_DATABASE_URL":      dbtest.NewDatabase(t),
+		"SPENDULUM_HTTP_ADDR":         addr,
+		"SPENDULUM_RATE_PROVIDER_URL": "http://" + closedPort(t) + "/v2",
 	}
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -154,6 +157,8 @@ func TestSIGTERMDrainsInFlightRequestsAndExitsZero(t *testing.T) {
 		"SPENDULUM_DATABASE_URL": "postgres://app:secret@" + blackhole(t) + "/spendulum?sslmode=disable",
 		"SPENDULUM_HTTP_ADDR":    addr,
 		"SPENDULUM_DB_TIMEOUT":   "1500ms",
+		// The startup backfill must not reach the real provider.
+		"SPENDULUM_RATE_PROVIDER_URL": "http://" + closedPort(t) + "/v2",
 	}
 
 	done := startServe(t.Context(), env)
@@ -187,6 +192,59 @@ func TestSIGTERMDrainsInFlightRequestsAndExitsZero(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not exit after SIGTERM")
+	}
+}
+
+func TestServeFetchesRatesOnlyFromTheConfiguredProvider(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		paths []string
+	)
+
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+
+		_, _ = w.Write([]byte("[]"))
+	}))
+	t.Cleanup(provider.Close)
+
+	addr := freeAddr(t)
+	env := map[string]string{
+		"SPENDULUM_DATABASE_URL":      dbtest.NewDatabase(t),
+		"SPENDULUM_HTTP_ADDR":         addr,
+		"SPENDULUM_RATE_PROVIDER_URL": provider.URL + "/v2",
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := startServe(ctx, env)
+
+	// The startup run backfills, then syncs: currencies and rates, twice.
+	want := []string{"/v2/currencies", "/v2/rates", "/v2/currencies", "/v2/rates"}
+
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		mu.Lock()
+		got := slices.Clone(paths)
+		mu.Unlock()
+
+		if slices.Equal(got, want) {
+			break
+		}
+	}
+
+	cancel()
+
+	res := <-done
+	if res.code != 0 {
+		t.Errorf("serve exited %d:\n%s", res.code, res.out)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if !slices.Equal(paths, want) {
+		t.Errorf("the startup run asked the configured provider for %v, want %v:\n%s", paths, want, res.out)
 	}
 }
 

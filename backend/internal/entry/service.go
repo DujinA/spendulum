@@ -21,6 +21,8 @@ type Repository interface {
 	Key(ctx context.Context, userID uuid.UUID, key string) (requestHash []byte, entryID uuid.UUID, err error)
 	Get(ctx context.Context, userID, id uuid.UUID) (Entry, error)
 	List(ctx context.Context, userID uuid.UUID, after *Cursor, limit int) ([]Entry, error)
+	// EarliestEntryDate reads across users; false when there is no entry.
+	EarliestEntryDate(ctx context.Context) (time.Time, bool, error)
 }
 
 type Transactor interface {
@@ -142,4 +144,9 @@ func (s *Service) List(ctx context.Context, userID uuid.UUID, after *Cursor, lim
 		Entries: entries[:limit],
 		Next:    &Cursor{EntryDate: last.EntryDate, CreatedAt: last.CreatedAt, ID: last.ID},
 	}, nil
+}
+
+// EarliestEntryDate is the earliest entry date of any user, for the exchange-rate backfill (#35).
+func (s *Service) EarliestEntryDate(ctx context.Context) (time.Time, bool, error) {
+	return s.d.Repo.EarliestEntryDate(ctx) //nolint:wrapcheck // the repository already says what failed
 }

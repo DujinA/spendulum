@@ -31,6 +31,11 @@ type CategoryIdempotencyKey struct {
 	CreatedAt   time.Time
 }
 
+type Currency struct {
+	Code       string
+	MinorUnits int16
+}
+
 type Entry struct {
 	ID         uuid.UUID
 	UserID     uuid.UUID
@@ -41,6 +46,12 @@ type Entry struct {
 	EntryDate  time.Time
 	Note       string
 	CreatedAt  time.Time
+}
+
+type ExchangeRate struct {
+	Currency string
+	RateDate time.Time
+	PerEur   pgtype.Numeric
 }
 
 type IdempotencyKey struct {

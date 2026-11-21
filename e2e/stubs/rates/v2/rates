@@ -1,0 +1,15 @@
+[
+  {"date":"2026-01-02","base":"EUR","quote":"BTC","rate":0.0000125},
+  {"date":"2026-01-02","base":"EUR","quote":"EUR","rate":1.0},
+  {"date":"2026-01-02","base":"EUR","quote":"GBP","rate":0.85},
+  {"date":"2026-01-02","base":"EUR","quote":"JPY","rate":160},
+  {"date":"2026-01-02","base":"EUR","quote":"KWD","rate":0.32},
+  {"date":"2026-01-02","base":"EUR","quote":"RSD","rate":117.5},
+  {"date":"2026-01-02","base":"EUR","quote":"USD","rate":1.1},
+  {"date":"2026-01-05","base":"EUR","quote":"EUR","rate":1.0},
+  {"date":"2026-01-05","base":"EUR","quote":"GBP","rate":0.86},
+  {"date":"2026-01-05","base":"EUR","quote":"JPY","rate":161},
+  {"date":"2026-01-05","base":"EUR","quote":"KWD","rate":0.33},
+  {"date":"2026-01-05","base":"EUR","quote":"RSD","rate":118},
+  {"date":"2026-01-05","base":"EUR","quote":"USD","rate":1.2}
+]

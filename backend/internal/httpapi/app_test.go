@@ -19,6 +19,7 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/category"
 	"github.com/DujinA/spendulum/backend/internal/entry"
+	"github.com/DujinA/spendulum/backend/internal/fx"
 	"github.com/DujinA/spendulum/backend/internal/httpapi"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/platform/db/dbtest"
@@ -78,6 +79,7 @@ func newApp(t *testing.T, opts ...appOption) *app {
 		Entries: entry.NewHandler(entry.NewService(entry.Deps{
 			Repo: entry.NewPostgres(d.Queries()), Tx: d, Settings: settingsSvc, Now: a.clock,
 		}), logger),
+		Currencies: fx.NewHandler(fx.NewService(fx.Deps{Repo: fx.NewPostgres(d.Queries())})),
 	}
 	for _, o := range opts {
 		o(&deps)

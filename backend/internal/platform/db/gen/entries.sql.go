@@ -86,6 +86,18 @@ func (q *Queries) DeleteExpiredIdempotencyKeys(ctx context.Context, arg DeleteEx
 	return err
 }
 
+const earliestEntryDate = `-- name: EarliestEntryDate :one
+SELECT entry_date FROM entries ORDER BY entry_date LIMIT 1
+`
+
+// unscoped: the startup exchange-rate backfill covers the entry dates of every user (#35).
+func (q *Queries) EarliestEntryDate(ctx context.Context) (time.Time, error) {
+	row := q.db.QueryRow(ctx, earliestEntryDate)
+	var entry_date time.Time
+	err := row.Scan(&entry_date)
+	return entry_date, err
+}
+
 const entries = `-- name: Entries :many
 SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.entry_date, e.note, e.created_at
 FROM entries e

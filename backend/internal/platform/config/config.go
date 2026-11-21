@@ -25,6 +25,8 @@ type Config struct {
 	CookieSecure bool `env:"SPENDULUM_COOKIE_SECURE" envDefault:"true"`
 	// Peers whose X-Forwarded-For names the client IP (ADR 0002: only Caddy).
 	TrustedProxies []netip.Prefix `env:"SPENDULUM_TRUSTED_PROXIES"`
+	// Frankfurter v2 (#5); tests and e2e point it at a local stub.
+	RateProviderURL string `env:"SPENDULUM_RATE_PROVIDER_URL" envDefault:"https://api.frankfurter.dev/v2"`
 }
 
 type VarError struct {
@@ -67,6 +69,10 @@ func (c Config) validate() error {
 		if d <= 0 {
 			errs = append(errs, &VarError{Var: name, Reason: "must be a positive duration"})
 		}
+	}
+
+	if p, err := url.Parse(c.RateProviderURL); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
+		errs = append(errs, &VarError{Var: "SPENDULUM_RATE_PROVIDER_URL", Reason: "must be an http:// or https:// URL with a host"})
 	}
 
 	switch c.LogLevel {
