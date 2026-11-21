@@ -41,3 +41,7 @@ ON CONFLICT (user_id, key) DO NOTHING;
 
 -- name: IdempotencyKey :one
 SELECT request_hash, entry_id FROM idempotency_keys WHERE user_id = $1 AND key = $2;
+
+-- unscoped: the startup exchange-rate backfill covers the entry dates of every user (#35).
+-- name: EarliestEntryDate :one
+SELECT entry_date FROM entries ORDER BY entry_date LIMIT 1;

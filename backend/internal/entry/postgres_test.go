@@ -151,6 +151,33 @@ func TestOneUserNeverReadsAnotherUsersEntries(t *testing.T) {
 	}
 }
 
+// The startup rate backfill needs rates for every user's entries, so this one read is across users (#35).
+func TestEarliestEntryDateIsTheEarliestOfAnyUser(t *testing.T) {
+	f := newFixture(t)
+	svc := entry.NewService(entry.Deps{Repo: f.repo})
+
+	if _, ok, err := svc.EarliestEntryDate(t.Context()); ok || err != nil {
+		t.Errorf("EarliestEntryDate with no entries = %v, %v; want none", ok, err)
+	}
+
+	a, b := dbtest.NewUser(t, f.d.Queries()), dbtest.NewUser(t, f.d.Queries())
+	aCat, bCat := f.category(t, a, category.Expense, "Groceries"), f.category(t, b, category.Expense, "Groceries")
+	f.entry(t, a, aCat, "2026-03-05", time.Now())
+	f.entry(t, b, bCat, "2026-02-10", time.Now())
+	f.entry(t, a, aCat, "2026-01-20", time.Now())
+	f.entry(t, b, bCat, "2026-04-01", time.Now())
+
+	if got, ok, err := svc.EarliestEntryDate(t.Context()); !ok || err != nil || !got.Equal(day(t, "2026-01-20")) {
+		t.Errorf("EarliestEntryDate = %s, %v, %v; want A's 2026-01-20", got, ok, err)
+	}
+
+	f.entry(t, b, bCat, "2025-12-31", time.Now())
+
+	if got, _, _ := svc.EarliestEntryDate(t.Context()); !got.Equal(day(t, "2025-12-31")) {
+		t.Errorf("EarliestEntryDate = %s, want B's 2025-12-31", got)
+	}
+}
+
 func TestAnEntryNeedsACategoryOfTheSameUserAndKind(t *testing.T) {
 	f := newFixture(t)
 	a, b := dbtest.NewUser(t, f.d.Queries()), dbtest.NewUser(t, f.d.Queries())

@@ -87,6 +87,28 @@ describe("keypad screen", () => {
     expect(amount()).toHaveTextContent(/^1,234\.6\s*din$/);
   });
 
+  it.each([
+    ["JPY", "12.5", /^125\s*JPY$/, 125, "125 JPY"],
+    ["KWD", "1.2345", /^1\.234\s*KWD$/, 1234, "1.234 KWD"],
+  ])(
+    "in %s takes the currency's minor units: typing %s shows and saves them",
+    async (primaryCurrency, keys, shown, saved, listed) => {
+      fakeSessionApi({ loggedIn: true });
+      const fake = fakeEntriesApi({ settings: { primaryCurrency, timeZone: "Europe/Belgrade" } });
+      renderApp("/new");
+
+      await tapKeypad(keys);
+      expect(amount()).toHaveTextContent(shown);
+
+      await pickCategory("Groceries");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      const [row] = within(await screen.findByRole("region", { name: "Today" })).getAllByRole("listitem");
+      expect(fake.creates.map((c) => c.body.amount)).toEqual([saved]);
+      expect(row).toHaveTextContent(listed);
+    },
+  );
+
   it("hides Refund and clears the chosen category when switched to Income", async () => {
     await openKeypad();
     await tapKeypad("5");

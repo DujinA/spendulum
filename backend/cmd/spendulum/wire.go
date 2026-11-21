@@ -2,10 +2,13 @@ package main
 
 import (
 	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/category"
 	"github.com/DujinA/spendulum/backend/internal/entry"
+	"github.com/DujinA/spendulum/backend/internal/fx"
 	"github.com/DujinA/spendulum/backend/internal/httpapi"
 	"github.com/DujinA/spendulum/backend/internal/platform/config"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
@@ -45,5 +48,17 @@ func newAPIDeps(d *db.DB, cfg config.Config, logger *slog.Logger) httpapi.Deps {
 		Entries: entry.NewHandler(entry.NewService(entry.Deps{
 			Repo: entry.NewPostgres(q), Vendors: vendorSvc, Tx: d, Settings: settingsSvc,
 		}), logger),
+		Currencies: fx.NewHandler(fx.NewService(fx.Deps{Repo: fx.NewPostgres(q)})),
 	}
+}
+
+func newRateScheduler(d *db.DB, providerURL string, logger *slog.Logger) (*fx.Scheduler, error) {
+	q := d.Queries()
+	svc := fx.NewService(fx.Deps{
+		Provider: fx.NewFrankfurter(providerURL, &http.Client{Timeout: time.Minute}),
+		Repo:     fx.NewPostgres(q),
+		Entries:  entry.NewService(entry.Deps{Repo: entry.NewPostgres(q)}),
+	})
+
+	return fx.NewScheduler(svc, logger) //nolint:wrapcheck // the error names the fx package
 }

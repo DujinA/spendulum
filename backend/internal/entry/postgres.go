@@ -123,6 +123,19 @@ func (p *Postgres) List(ctx context.Context, userID uuid.UUID, after *Cursor, li
 	return out, nil
 }
 
+func (p *Postgres) EarliestEntryDate(ctx context.Context) (time.Time, bool, error) {
+	d, err := p.q.EarliestEntryDate(ctx)
+
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return time.Time{}, false, nil
+	case err != nil:
+		return time.Time{}, false, fmt.Errorf("entry: select earliest entry date: %w", err)
+	}
+
+	return d, true, nil
+}
+
 func fromRow(r gen.EntriesRow) Entry {
 	e := Entry{
 		ID: r.ID, Kind: category.Kind(r.Kind), Amount: r.Amount, Currency: r.Currency, CategoryID: r.CategoryID,

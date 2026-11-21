@@ -3,10 +3,10 @@ import { RotateCw } from "lucide-react";
 import { useEffect, useEffectEvent, useId, useRef } from "react";
 
 import { useApi } from "@/api/context";
-import { entriesQuery, settingsQuery, type Entry } from "@/api/entries";
+import { currenciesQuery, entriesQuery, settingsQuery, type Entry } from "@/api/entries";
 import { Button } from "@/components/ui/button";
 import { dayLabel, todayIn } from "@/lib/dates";
-import { formatMoney } from "@/lib/money";
+import { findCurrency, formatMoney, type Currency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 interface Day {
@@ -50,6 +50,7 @@ function useWhenVisible(onVisible: () => void, enabled: boolean) {
 export function EntriesScreen() {
   const api = useApi();
   const { data: settings } = useSuspenseQuery(settingsQuery(api));
+  const { data: currencies } = useSuspenseQuery(currenciesQuery(api));
   const entries = useSuspenseInfiniteQuery(entriesQuery(api));
   const today = todayIn(settings.timeZone);
   const days = byDay(entries.data.pages.flatMap((page) => page.entries));
@@ -78,7 +79,7 @@ export function EntriesScreen() {
       {days.length === 0 && <p className="text-muted-foreground">No entries yet. Tap + to record one.</p>}
 
       {days.map((day) => (
-        <DaySection key={day.date} label={dayLabel(day.date, today)} entries={day.entries} />
+        <DaySection key={day.date} label={dayLabel(day.date, today)} entries={day.entries} currencies={currencies} />
       ))}
 
       <div ref={sentinel} />
@@ -98,7 +99,7 @@ export function EntriesScreen() {
   );
 }
 
-function DaySection({ label, entries }: { label: string; entries: Entry[] }) {
+function DaySection({ label, entries, currencies }: { label: string; entries: Entry[]; currencies: Currency[] }) {
   const id = useId();
   return (
     <section aria-labelledby={id}>
@@ -107,14 +108,14 @@ function DaySection({ label, entries }: { label: string; entries: Entry[] }) {
       </h2>
       <ul>
         {entries.map((entry) => (
-          <EntryRow key={entry.id} entry={entry} />
+          <EntryRow key={entry.id} entry={entry} currency={findCurrency(currencies, entry.currency)} />
         ))}
       </ul>
     </section>
   );
 }
 
-function EntryRow({ entry }: { entry: Entry }) {
+function EntryRow({ entry, currency }: { entry: Entry; currency: Currency }) {
   const isRefund = entry.amount < 0;
   const details = [entry.vendorName ? entry.categoryName : "", entry.note].filter((part) => part !== "").join(" · ");
   return (
@@ -136,7 +137,7 @@ function EntryRow({ entry }: { entry: Entry }) {
           entry.kind === "income" && "text-income",
         )}
       >
-        {formatMoney(entry.amount, entry.currency)}
+        {formatMoney(entry.amount, currency)}
       </span>
     </li>
   );

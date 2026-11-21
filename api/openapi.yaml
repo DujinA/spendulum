@@ -161,6 +161,23 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/currencies:
+    get:
+      operationId: listCurrencies
+      summary: The currencies an entry can be in
+      description: Every currency the rate provider supports, by code, each with its ISO 4217 minor units.
+      tags: [currencies]
+      responses:
+        "200":
+          description: The supported currencies.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Currency"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/entries:
     get:
       operationId: listEntries
@@ -358,6 +375,18 @@ components:
         timeZone:
           type: string
           description: The IANA time zone that decides "today".
+    Currency:
+      type: object
+      required: [code, minorUnits]
+      properties:
+        code:
+          type: string
+          description: The ISO 4217 code.
+        minorUnits:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: The digits after the decimal point; an amount in this currency is an integer of these units.
     Kind:
       type: string
       enum: [expense, income]

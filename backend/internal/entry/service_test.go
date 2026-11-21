@@ -234,6 +234,10 @@ func (f *fakeRepo) Get(_ context.Context, _ uuid.UUID, id uuid.UUID) (entry.Entr
 	return e, nil
 }
 
+func (f *fakeRepo) EarliestEntryDate(context.Context) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
+
 func (f *fakeRepo) List(context.Context, uuid.UUID, *entry.Cursor, int) ([]entry.Entry, error) {
 	return nil, nil
 }

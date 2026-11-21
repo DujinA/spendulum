@@ -64,6 +64,15 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
+// Currency defines model for Currency.
+type Currency struct {
+	// Code The ISO 4217 code.
+	Code string `json:"code"`
+
+	// MinorUnits The digits after the decimal point; an amount in this currency is an integer of these units.
+	MinorUnits int `json:"minorUnits"`
+}
+
 // Entry defines model for Entry.
 type Entry struct {
 	// Amount In minor units of `currency`, as typed; negative for a refund.
@@ -239,6 +248,9 @@ type ServerInterface interface {
 	// ListCategories The categories a picker offers
 	// (GET /api/categories)
 	ListCategories(w http.ResponseWriter, r *http.Request)
+	// ListCurrencies The currencies an entry can be in
+	// (GET /api/currencies)
+	ListCurrencies(w http.ResponseWriter, r *http.Request)
 	// ListEntries List entries
 	// (GET /api/entries)
 	ListEntries(w http.ResponseWriter, r *http.Request, params ListEntriesParams)
@@ -285,6 +297,20 @@ func (siw *ServerInterfaceWrapper) ListCategories(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListCategories(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCurrencies operation middleware
+func (siw *ServerInterfaceWrapper) ListCurrencies(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCurrencies(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -667,6 +693,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/settings", wrapper.GetSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/categories", wrapper.ListCategories)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/vendors", wrapper.ListVendors)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/currencies", wrapper.ListCurrencies)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/entries", wrapper.ListEntries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/entries", wrapper.CreateEntry)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/entries/{id}", wrapper.GetEntry)
@@ -712,6 +739,43 @@ type ListCategories401ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ListCategories401ApplicationProblemPlusJSONResponse) VisitListCategoriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCurrenciesRequestObject struct {
+}
+
+type ListCurrenciesResponseObject interface {
+	VisitListCurrenciesResponse(w http.ResponseWriter) error
+}
+
+type ListCurrencies200JSONResponse []Currency
+
+func (response ListCurrencies200JSONResponse) VisitListCurrenciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCurrencies401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListCurrencies401ApplicationProblemPlusJSONResponse) VisitListCurrenciesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1268,6 +1332,9 @@ type StrictServerInterface interface {
 	// ListCategories The categories a picker offers
 	// (GET /api/categories)
 	ListCategories(ctx context.Context, request ListCategoriesRequestObject) (ListCategoriesResponseObject, error)
+	// ListCurrencies The currencies an entry can be in
+	// (GET /api/currencies)
+	ListCurrencies(ctx context.Context, request ListCurrenciesRequestObject) (ListCurrenciesResponseObject, error)
 	// ListEntries List entries
 	// (GET /api/entries)
 	ListEntries(ctx context.Context, request ListEntriesRequestObject) (ListEntriesResponseObject, error)
@@ -1356,6 +1423,30 @@ func (sh *strictHandler) ListCategories(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListCategoriesResponseObject); ok {
 		if err := validResponse.VisitListCategoriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCurrencies operation middleware
+func (sh *strictHandler) ListCurrencies(w http.ResponseWriter, r *http.Request) {
+	var request ListCurrenciesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCurrencies(ctx, request.(ListCurrenciesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCurrencies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCurrenciesResponseObject); ok {
+		if err := validResponse.VisitListCurrenciesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

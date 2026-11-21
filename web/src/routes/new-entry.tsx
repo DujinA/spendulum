@@ -8,6 +8,7 @@ import { useApi } from "@/api/context";
 import {
   categoriesQuery,
   createEntry,
+  currenciesQuery,
   entriesQueryKey,
   settingsQuery,
   type Category,
@@ -20,7 +21,7 @@ import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { VendorPicker } from "@/components/vendor-picker";
 import { addDays, dayLabel, todayIn } from "@/lib/dates";
-import { currencyLabel, formatTyped, isAmountKey, pressKey, toMinorUnits } from "@/lib/money";
+import { currencyLabel, findCurrency, formatTyped, isAmountKey, pressKey, toMinorUnits } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Sheet = "vendor" | "category" | "date" | "note";
@@ -53,6 +54,7 @@ export function NewEntryScreen() {
   const canGoBack = useCanGoBack();
   const { data: settings } = useSuspenseQuery(settingsQuery(api));
   const { data: categories } = useSuspenseQuery(categoriesQuery(api));
+  const { data: currencies } = useSuspenseQuery(currenciesQuery(api));
 
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [today] = useState(() => todayIn(settings.timeZone));
@@ -69,7 +71,7 @@ export function NewEntryScreen() {
   // Only a control reached with Tab keeps its own Enter; after a tap or click, Enter saves.
   const focusedByTab = useRef(false);
 
-  const currency = settings.primaryCurrency;
+  const currency = findCurrency(currencies, settings.primaryCurrency);
   const vendorLabel = kind === "income" ? "Source" : "Vendor";
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
@@ -186,7 +188,7 @@ export function NewEntryScreen() {
             {refund && "−"}
             {formatTyped(typed)}
           </span>
-          <span className="text-muted-foreground text-xl font-medium">{currencyLabel(currency)}</span>
+          <span className="text-muted-foreground text-xl font-medium">{currencyLabel(currency.code)}</span>
         </output>
         {kind === "expense" && (
           <button
