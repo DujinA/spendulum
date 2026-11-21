@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math/big"
 	"reflect"
@@ -64,7 +65,7 @@ func TestAFailedSyncRetriesWithBackoffUntilTheNextScheduledRunAndIsLogged(t *tes
 
 		logs := runScheduler(t, f, 16*time.Hour+5*time.Minute)
 
-		got := f.provider.callTimes()
+		got := slices.Compact(f.provider.callTimes())
 		first := []time.Time{
 			utc(t, "2000-01-01T00:00:00Z"),
 			utc(t, "2000-01-01T00:01:00Z"),
@@ -120,6 +121,27 @@ func TestTheDailyRunBackfillsTheHistoryAFailedStartupLeftMissing(t *testing.T) {
 		}
 	})
 }
+
+func TestARunWhoseBackfillFailsStillStoresTheNewestRatesAndIsRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFixture()
+		f.entries.err = errEntriesDown
+		f.provider.rates = []fx.Rate{rate(t, "RSD", "2000-01-01", "117.5")}
+
+		logs := runScheduler(t, f, 2*time.Minute)
+
+		if !f.repo.has("RSD", day(t, "2000-01-01")) {
+			t.Error("the newest rate was not stored when the backfill failed")
+		}
+
+		failures := logs.records("exchange-rate sync failed")
+		if len(failures) != 2 || !strings.Contains(failures[0]["error"].(string), errEntriesDown.Error()) {
+			t.Errorf("failures logged = %v, want the startup run and its retry a minute later, naming the backfill's error", failures)
+		}
+	})
+}
+
+var errEntriesDown = errors.New("entries are unreachable")
 
 // runScheduler runs the scheduler for d of bubble time, stops it, and returns what it logged.
 func runScheduler(t *testing.T, f *fixture, d time.Duration) *logBuffer {

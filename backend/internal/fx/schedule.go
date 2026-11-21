@@ -2,6 +2,7 @@ package fx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -41,13 +42,14 @@ func (s *Scheduler) Run(ctx context.Context) {
 	}
 }
 
-// Every run backfills first, so history that a failed startup left missing is filled at the next run.
+// Every run backfills, so missing history is filled at the next run, and then syncs even if the backfill failed.
 func (s *Scheduler) backfillAndSync(ctx context.Context, today time.Time) error {
-	if err := s.svc.BackfillFromEarliestEntry(ctx, today); err != nil {
-		return err
+	backfillErr := s.svc.BackfillFromEarliestEntry(ctx, today)
+	if ctx.Err() != nil {
+		return backfillErr
 	}
 
-	return s.svc.Sync(ctx, today)
+	return errors.Join(backfillErr, s.svc.Sync(ctx, today))
 }
 
 // untilDone retries a failed run with doubling waits, and leaves the rest to the run scheduled at deadline.

@@ -215,10 +215,11 @@ func (r *fakeRepo) has(currency string, date time.Time) bool {
 
 type fakeEntries struct {
 	earliest time.Time
+	err      error
 }
 
 func (e *fakeEntries) EarliestEntryDate(context.Context) (time.Time, bool, error) {
-	return e.earliest, !e.earliest.IsZero(), nil
+	return e.earliest, !e.earliest.IsZero(), e.err
 }
 
 func compare(a, b string) int {
