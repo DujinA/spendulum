@@ -20,6 +20,18 @@ export function settingsQuery(api: ApiClient) {
   });
 }
 
+export function currenciesQuery(api: ApiClient) {
+  return queryOptions({
+    queryKey: ["currencies"],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/currencies");
+      if (!data) throw apiError(response, error);
+      return data;
+    },
+    staleTime: 60 * 60_000,
+  });
+}
+
 export function categoriesQuery(api: ApiClient) {
   return queryOptions({
     queryKey: ["categories"],

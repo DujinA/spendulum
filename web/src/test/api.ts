@@ -53,6 +53,15 @@ type Category = components["schemas"]["Category"];
 type Entry = components["schemas"]["Entry"];
 type NewEntry = components["schemas"]["NewEntry"];
 type EntryPage = components["schemas"]["EntryPage"];
+type Currency = components["schemas"]["Currency"];
+
+export const testCurrencies: Currency[] = [
+  { code: "EUR", minorUnits: 2 },
+  { code: "JPY", minorUnits: 0 },
+  { code: "KWD", minorUnits: 3 },
+  { code: "RSD", minorUnits: 2 },
+  { code: "USD", minorUnits: 2 },
+];
 
 export const groceries: Category = { id: "0195f3a0-0000-7000-8000-000000000001", kind: "expense", name: "Groceries" };
 export const eatingOut: Category = { id: "0195f3a0-0000-7000-8000-000000000002", kind: "expense", name: "Eating out" };
@@ -125,6 +134,7 @@ export function fakeEntriesApi({
   server.use(
     http.get("*/api/settings", () => HttpResponse.json<Settings>(settings)),
     http.get("*/api/categories", () => HttpResponse.json<Category[]>(categories)),
+    http.get("*/api/currencies", () => HttpResponse.json<Currency[]>(testCurrencies)),
     http.get<never, never, EntryPage | Problem>("*/api/entries", async ({ request }) => {
       state.listRequests++;
       await held;

@@ -1,8 +1,10 @@
-// Until the currencies table (#35) gives each currency its minor units, every one has RSD's 2.
-const minorUnitsByCurrency: Partial<Record<string, number>> = {};
+import type { components } from "@/api/schema.gen";
 
-function minorUnits(currency: string) {
-  return minorUnitsByCurrency[currency] ?? 2;
+export type Currency = components["schemas"]["Currency"];
+
+// Before the first rate sync the list is empty, so a missing code takes 2, the most common minor units.
+export function findCurrency(currencies: readonly Currency[], code: string): Currency {
+  return currencies.find((c) => c.code === code) ?? { code, minorUnits: 2 };
 }
 
 const symbols: Partial<Record<string, string>> = { RSD: "din" };
@@ -18,12 +20,12 @@ function groupThousands(digits: string) {
 }
 
 // Amounts are integer minor units, so this works on digits, never on floats.
-export function formatMoney(amount: number, currency: string) {
-  const units = minorUnits(currency);
+export function formatMoney(amount: number, currency: Currency) {
+  const units = currency.minorUnits;
   const digits = String(Math.abs(amount)).padStart(units + 1, "0");
   const whole = groupThousands(digits.slice(0, digits.length - units));
   const fraction = units > 0 ? `.${digits.slice(digits.length - units)}` : "";
-  return `${amount < 0 ? "−" : ""}${whole}${fraction} ${currencyLabel(currency)}`;
+  return `${amount < 0 ? "−" : ""}${whole}${fraction} ${currencyLabel(currency.code)}`;
 }
 
 export function isAmountKey(key: string) {
@@ -31,10 +33,10 @@ export function isAmountKey(key: string) {
 }
 
 // The amount as typed on the keypad: digits, then at most one "." and the currency's minor units.
-export function pressKey(typed: string, key: string, currency: string) {
+export function pressKey(typed: string, key: string, currency: Currency) {
   if (key === "Backspace") return typed.slice(0, -1);
 
-  const units = minorUnits(currency);
+  const units = currency.minorUnits;
   const [whole = "", fraction] = typed.split(".");
 
   if (key === "." || key === ",") {
@@ -48,8 +50,8 @@ export function pressKey(typed: string, key: string, currency: string) {
   return whole.length < maxIntegerDigits ? typed + key : typed;
 }
 
-export function toMinorUnits(typed: string, currency: string) {
-  const units = minorUnits(currency);
+export function toMinorUnits(typed: string, currency: Currency) {
+  const units = currency.minorUnits;
   const [whole = "", fraction = ""] = typed.split(".");
   return Number(`${whole}${fraction.padEnd(units, "0")}`);
 }

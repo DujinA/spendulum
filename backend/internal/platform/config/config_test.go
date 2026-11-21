@@ -29,6 +29,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		ShutdownTimeout: 20 * time.Second,
 		LogLevel:        "info",
 		CookieSecure:    true,
+		RateProviderURL: "https://api.frankfurter.dev/v2",
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -92,6 +93,16 @@ func TestLoadNamesTheBadVariable(t *testing.T) {
 			wantVar: "SPENDULUM_SHUTDOWN_TIMEOUT",
 		},
 		{
+			name:    "rate provider URL that is not HTTP",
+			env:     with(validEnv(), "SPENDULUM_RATE_PROVIDER_URL", "ftp://rates.example.test/v2"),
+			wantVar: "SPENDULUM_RATE_PROVIDER_URL",
+		},
+		{
+			name:    "rate provider URL without a host",
+			env:     with(validEnv(), "SPENDULUM_RATE_PROVIDER_URL", "http:///v2"),
+			wantVar: "SPENDULUM_RATE_PROVIDER_URL",
+		},
+		{
 			name:    "unknown log level",
 			env:     with(validEnv(), "SPENDULUM_LOG_LEVEL", "loud"),
 			wantVar: "SPENDULUM_LOG_LEVEL",
@@ -134,5 +145,16 @@ func TestLoadParsesTrustedProxiesAndTheCookieFlag(t *testing.T) {
 	want := []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16"), netip.MustParsePrefix("127.0.0.1/32")}
 	if !reflect.DeepEqual(cfg.TrustedProxies, want) || cfg.CookieSecure {
 		t.Errorf("TrustedProxies = %v, CookieSecure = %v; want %v, false", cfg.TrustedProxies, cfg.CookieSecure, want)
+	}
+}
+
+func TestLoadTakesTheRateProviderBaseURL(t *testing.T) {
+	cfg, err := config.Load(with(validEnv(), "SPENDULUM_RATE_PROVIDER_URL", "http://rates:8080/v2"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.RateProviderURL != "http://rates:8080/v2" {
+		t.Errorf("RateProviderURL = %q, want http://rates:8080/v2", cfg.RateProviderURL)
 	}
 }

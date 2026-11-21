@@ -26,7 +26,7 @@ services:
       db:
         condition: service_healthy
 
-  # Placeholder for the Frankfurter stub; see stubs/rates/README.md.
+  # Stands in for Frankfurter with fixed fake rates; see stubs/rates/README.md.
   rates:
     image: busybox:1.38
     command: ["httpd", "-f", "-p", "8080", "-h", "/srv"]
@@ -41,6 +41,7 @@ services:
       SPENDULUM_DATABASE_URL: *database-url
       # Playwright reaches the app over plain HTTP at http://spendulum:8080, where browsers drop Secure cookies.
       SPENDULUM_COOKIE_SECURE: "false"
+      SPENDULUM_RATE_PROVIDER_URL: http://rates:8080/v2
     ports:
       - "127.0.0.1:8081:8080"
     depends_on:
