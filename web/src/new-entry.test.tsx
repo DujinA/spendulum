@@ -245,4 +245,30 @@ describe("keypad screen", () => {
       { kind: "expense", amount: -178080, categoryId: groceries.id, entryDate: "2026-03-02", note: "" },
     ]);
   });
+
+  it("saves with Enter after Refund was clicked and the amount typed on the keyboard", async () => {
+    const { fake } = await openKeypad();
+    await pickCategory("Groceries");
+    await userEvent.click(screen.getByRole("button", { name: "Refund" }));
+
+    await userEvent.keyboard("25{Enter}");
+
+    await screen.findByRole("heading", { level: 1, name: "Entries" });
+    expect(fake.creates.map((c) => c.body.amount)).toEqual([-2500]);
+  });
+
+  it("leaves Enter to a control reached with Tab", async () => {
+    const { fake, router } = await openKeypad();
+    await pickCategory("Groceries");
+    await userEvent.click(amount());
+    await userEvent.keyboard("25");
+
+    await userEvent.tab();
+    expect(document.activeElement).toHaveAccessibleName("Dashboard");
+    await userEvent.keyboard("{Enter}");
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    expect(fake.creates).toEqual([]);
+  });
 });

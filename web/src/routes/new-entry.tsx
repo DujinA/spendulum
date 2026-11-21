@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { Check, Delete, Undo2 } from "lucide-react";
-import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/api/client";
 import { useApi } from "@/api/context";
@@ -34,9 +34,8 @@ function isTextField(target: EventTarget | null) {
   );
 }
 
-// A control the user reached with the keyboard keeps its own Enter; after a tap or click, Enter saves.
-function keepsEnter(target: EventTarget | null) {
-  return target instanceof HTMLElement && target.closest("button, a") !== null && target.matches(":focus-visible");
+function isControl(target: EventTarget | null) {
+  return target instanceof HTMLElement && target.closest("button, a") !== null;
 }
 
 function saveError(error: Error) {
@@ -62,6 +61,8 @@ export function NewEntryScreen() {
   const [entryDate, setEntryDate] = useState(today);
   const [note, setNote] = useState("");
   const [sheet, setSheet] = useState<Sheet>();
+  // Only a control reached with Tab keeps its own Enter; after a tap or click, Enter saves.
+  const focusedByTab = useRef(false);
 
   const currency = settings.primaryCurrency;
   const magnitude = toMinorUnits(typed, currency);
@@ -101,6 +102,7 @@ export function NewEntryScreen() {
   }
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === "Tab") focusedByTab.current = true;
     if (sheet || event.ctrlKey || event.metaKey || event.altKey || isTextField(event.target)) return;
 
     if (isAmountKey(event.key)) {
@@ -109,16 +111,21 @@ export function NewEntryScreen() {
     } else if (event.key === "-") {
       event.preventDefault();
       toggleRefund();
-    } else if (event.key === "Enter" && !keepsEnter(event.target)) {
+    } else if (event.key === "Enter" && !(focusedByTab.current && isControl(event.target))) {
       event.preventDefault();
       submit();
     }
   });
 
   useEffect(() => {
+    const onPointerDown = () => {
+      focusedByTab.current = false;
+    };
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
     };
   }, []);
 

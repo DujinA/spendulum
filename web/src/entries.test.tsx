@@ -92,6 +92,27 @@ describe("entry list", () => {
     expect(api.listRequests).toBe(3);
   });
 
+  it("stops loading pages after one fails, until Try again is tapped", async () => {
+    fakeSessionApi({ loggedIn: true });
+    const api = fakeEntriesApi({
+      pageSize: 2,
+      entries: ["2026-03-02", "2026-03-01", "2026-02-28"].map((entryDate) => fakeEntry({ entryDate })),
+    });
+    renderApp("/entries");
+    expect(await days()).toHaveLength(2);
+
+    api.failLists = 1;
+    scrollObservedIntoView();
+    const retry = await screen.findByRole("button", { name: /Could not load more/ });
+    scrollObservedIntoView();
+    scrollObservedIntoView();
+    await userEvent.click(retry);
+    await waitFor(async () => {
+      expect(await days()).toHaveLength(3);
+    });
+    expect(api.listRequests).toBe(3);
+  });
+
   it("refetches the list from the refresh control in the header", async () => {
     fakeSessionApi({ loggedIn: true });
     const api = fakeEntriesApi({ entries: [fakeEntry({ entryDate: "2026-03-01", note: "old" })] });

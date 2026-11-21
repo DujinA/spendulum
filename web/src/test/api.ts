@@ -100,6 +100,7 @@ export function fakeEntriesApi({
     entries: [...entries],
     creates: [] as CreateRequest[],
     listRequests: 0,
+    failLists: 0,
     failCreates: 0,
   };
   const byKey = new Map<string, Entry>();
@@ -112,8 +113,12 @@ export function fakeEntriesApi({
   server.use(
     http.get("*/api/settings", () => HttpResponse.json<Settings>(settings)),
     http.get("*/api/categories", () => HttpResponse.json<Category[]>(categories)),
-    http.get("*/api/entries", ({ request }) => {
+    http.get<never, never, EntryPage | Problem>("*/api/entries", ({ request }) => {
       state.listRequests++;
+      if (state.failLists > 0) {
+        state.failLists--;
+        return problem(503, "Service Unavailable", "");
+      }
       const start = Number(new URL(request.url).searchParams.get("cursor") ?? "0");
       const all = sorted();
       const page: EntryPage = { entries: all.slice(start, start + pageSize) };

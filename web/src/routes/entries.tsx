@@ -55,7 +55,7 @@ export function EntriesScreen() {
   const days = byDay(entries.data.pages.flatMap((page) => page.entries));
   const sentinel = useWhenVisible(() => {
     void entries.fetchNextPage();
-  }, entries.hasNextPage && !entries.isFetchingNextPage);
+  }, entries.hasNextPage && !entries.isFetchingNextPage && !entries.isFetchNextPageError);
 
   return (
     <section className="flex flex-col gap-4 md:max-w-2xl">
