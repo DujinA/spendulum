@@ -1,4 +1,4 @@
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Ellipsis, LayoutDashboard, List, Plus, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -16,19 +16,24 @@ const navItems: NavItem[] = [
   { to: "/more", label: "More", icon: Ellipsis },
 ];
 
+// The keypad screen fills a phone screen with its own Cancel and Save, so it has no tab bar there.
 export function AppShell() {
+  const fullScreen = useRouterState({ select: (state) => state.location.pathname === "/new" });
   return (
     <div className="min-h-dvh md:flex">
       <Sidebar />
       <main
         className={cn(
           "flex-1 pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))]",
-          "pb-[calc(5rem+env(safe-area-inset-bottom))] md:px-8 md:pt-[max(1.5rem,env(safe-area-inset-top))] md:pb-8",
+          "md:px-8 md:pt-[max(1.5rem,env(safe-area-inset-top))] md:pb-8",
+          fullScreen
+            ? "flex h-dvh flex-col pb-[max(0.75rem,env(safe-area-inset-bottom))] md:h-auto"
+            : "pb-[calc(5rem+env(safe-area-inset-bottom))]",
         )}
       >
         <Outlet />
       </main>
-      <TabBar />
+      {!fullScreen && <TabBar />}
     </div>
   );
 }
