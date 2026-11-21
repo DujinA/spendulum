@@ -203,7 +203,19 @@ export function fakeCategoriesApi({
     orders: [] as CategoryOrder[],
     deletes: [] as string[],
     failOrders: 0,
+    // Holds every order response until the returned function is called.
+    holdOrders() {
+      let release: () => void = () => undefined;
+      heldOrders = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        heldOrders = undefined;
+        release();
+      };
+    },
   };
+  let heldOrders: Promise<void> | undefined;
   let nextCategory = 100;
 
   const listed = (withArchived: boolean) =>
@@ -251,6 +263,7 @@ export function fakeCategoriesApi({
     http.put<never, CategoryOrder>("*/api/categories/order", async ({ request }) => {
       const body = await request.json();
       state.orders.push(body);
+      await heldOrders;
       if (state.failOrders > 0) {
         state.failOrders--;
         return problem(503, "Service Unavailable", "");

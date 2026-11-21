@@ -194,6 +194,37 @@ describe("More → Categories", () => {
     expect(names(activeList("Income"))).toEqual(["Other", "Salary"]);
   });
 
+  it("saves one order at a time, so the last of two quick moves is the order that stays", async () => {
+    const { fake } = await openCategories();
+    const release = fake.holdOrders();
+
+    await userEvent.click(screen.getByRole("button", { name: "Move Groceries down" }));
+    await userEvent.click(screen.getByRole("button", { name: "Move Groceries down" }));
+
+    expect(names(activeList("Expense"))).toEqual(["Eating out", "Other", "Groceries"]);
+    await waitFor(() => {
+      expect(fake.orders).toHaveLength(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fake.orders).toHaveLength(1);
+
+    release();
+
+    await waitFor(() => {
+      expect(fake.orders).toHaveLength(2);
+    });
+    expect(fake.orders[1]).toEqual({ kind: "expense", ids: [eatingOut.id, otherExpense.id, groceries.id, oldHobby.id] });
+    await waitFor(() => {
+      expect(fake.categories.filter((c) => c.kind === "expense").map((c) => c.name)).toEqual([
+        "Eating out",
+        "Other",
+        "Groceries",
+        "Old hobby",
+      ]);
+    });
+    expect(names(activeList("Expense"))).toEqual(["Eating out", "Other", "Groceries"]);
+  });
+
   it("puts the order back and says so when saving it fails", async () => {
     const { fake } = await openCategories();
     fake.failOrders = 1;

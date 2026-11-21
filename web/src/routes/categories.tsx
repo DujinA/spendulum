@@ -63,6 +63,8 @@ function useReorder() {
 
   return useMutation({
     mutationKey,
+    // One save at a time, so quick moves reach the server in the order they were made.
+    scope: { id: "category-order" },
     mutationFn: (order: CategoryOrder) => reorderCategories(api, order),
     onMutate: async (order) => {
       await queryClient.cancelQueries({ queryKey: categoriesQueryKey });
