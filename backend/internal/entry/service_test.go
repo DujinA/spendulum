@@ -2,6 +2,8 @@ package entry_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -137,6 +139,34 @@ func TestTheSameKeyWithAnotherVendorIsADifferentRequest(t *testing.T) {
 	if _, err := svc.Create(t.Context(), user, "k", n); !errors.Is(err, entry.ErrKeyReused) {
 		t.Errorf("Create with another vendor = %v, want ErrKeyReused", err)
 	}
+}
+
+func TestAKeyStoredBeforeVendorsReplaysItsEntryForTheSameRequest(t *testing.T) {
+	repo := newFakeRepo()
+	n := entry.NewEntry{Kind: category.Expense, Amount: 178080, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), Note: "weekly groceries"}
+	stored := entry.Entry{ID: uuid.Must(uuid.NewV7()), Kind: n.Kind, Amount: n.Amount, Currency: "RSD", CategoryID: n.CategoryID, EntryDate: n.EntryDate}
+	repo.entries[stored.ID] = stored
+	repo.keys["k"] = fakeKey{hash: fingerprintBeforeVendors(n), entryID: stored.ID}
+
+	got, err := newService(repo).Create(t.Context(), uuid.Must(uuid.NewV7()), "k", n)
+
+	if err != nil || got.ID != stored.ID {
+		t.Errorf("Create = %+v, %v; want the entry %v stored under the key before vendors", got, err, stored.ID)
+	}
+}
+
+// fingerprintBeforeVendors is the request fingerprint as #29 wrote it, before entries had vendors.
+func fingerprintBeforeVendors(n entry.NewEntry) []byte {
+	h := sha256.New()
+	h.Write([]byte(n.Kind))
+	h.Write([]byte{0})
+	_ = binary.Write(h, binary.BigEndian, n.Amount)
+	h.Write(n.CategoryID[:])
+	h.Write([]byte(n.EntryDate.Format(time.DateOnly)))
+	h.Write([]byte{0})
+	h.Write([]byte(n.Note))
+
+	return h.Sum(nil)
 }
 
 type fakeVendors struct {

@@ -88,11 +88,15 @@ func (n NewEntry) fingerprint() []byte {
 	h.Write([]byte{0})
 	_ = binary.Write(h, binary.BigEndian, n.Amount)
 	h.Write(n.CategoryID[:])
-	h.Write([]byte(n.VendorName))
-	h.Write([]byte{0})
 	h.Write([]byte(n.EntryDate.Format(time.DateOnly)))
 	h.Write([]byte{0})
 	h.Write([]byte(n.Note))
+
+	// Appended only when set, so a request without a vendor keeps the hash keys stored before vendors existed.
+	if n.VendorName != "" {
+		h.Write([]byte(n.VendorName))
+		h.Write([]byte{0})
+	}
 
 	return h.Sum(nil)
 }
