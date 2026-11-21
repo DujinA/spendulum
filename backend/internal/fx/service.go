@@ -3,6 +3,7 @@ package fx
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -137,7 +138,8 @@ func (s *Service) fetch(ctx context.Context, ranges []dateRange) error {
 	}
 
 	for _, r := range ranges {
-		for _, c := range r.chunks(maxDaysPerRequest) {
+		// Newest first: if a chunk fails, no stored rate lies within the lookback before it, so the next run fetches it again.
+		for _, c := range slices.Backward(r.chunks(maxDaysPerRequest)) {
 			rates, err := s.d.Provider.Rates(ctx, c.from, c.to)
 			if err != nil {
 				return fmt.Errorf("fx: fetch rates %s: %w", c, err)

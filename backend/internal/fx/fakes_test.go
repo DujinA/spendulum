@@ -36,6 +36,8 @@ type fakeProvider struct {
 	err        error
 	requests   []request
 	calls      []time.Time
+	// The first rates request whose range holds this date fails.
+	failOnceOn time.Time
 }
 
 func (p *fakeProvider) Currencies(context.Context) ([]string, error) {
@@ -59,6 +61,12 @@ func (p *fakeProvider) Rates(_ context.Context, from, to time.Time) ([]fx.Rate, 
 
 	if p.err != nil {
 		return nil, p.err
+	}
+
+	if !p.failOnceOn.IsZero() && !from.After(p.failOnceOn) && !to.Before(p.failOnceOn) {
+		p.failOnceOn = time.Time{}
+
+		return nil, errProviderDown
 	}
 
 	var out []fx.Rate

@@ -137,7 +137,7 @@ func TestStartupBackfillAsksTheProviderNothingWhenStoredRatesCoverTheRange(t *te
 	}
 }
 
-func TestBackfillOfARangeFetchesItInRequestsOfAtMost92Days(t *testing.T) {
+func TestBackfillOfARangeFetchesItInRequestsOfAtMost92DaysNewestFirst(t *testing.T) {
 	f := newFixture()
 
 	if err := f.svc.Backfill(t.Context(), day(t, "2025-01-01"), day(t, "2025-12-31")); err != nil {
@@ -145,11 +145,11 @@ func TestBackfillOfARangeFetchesItInRequestsOfAtMost92Days(t *testing.T) {
 	}
 
 	want := []request{
-		{day(t, "2024-12-25"), day(t, "2025-03-26")},
-		{day(t, "2025-03-27"), day(t, "2025-06-26")},
-		{day(t, "2025-06-27"), day(t, "2025-09-26")},
-		{day(t, "2025-09-27"), day(t, "2025-12-27")},
 		{day(t, "2025-12-28"), day(t, "2025-12-31")},
+		{day(t, "2025-09-27"), day(t, "2025-12-27")},
+		{day(t, "2025-06-27"), day(t, "2025-09-26")},
+		{day(t, "2025-03-27"), day(t, "2025-06-26")},
+		{day(t, "2024-12-25"), day(t, "2025-03-26")},
 	}
 	if got := f.provider.madeRequests(); !reflect.DeepEqual(got, want) {
 		t.Errorf("rate requests = %v, want %v", got, want)
@@ -226,6 +226,45 @@ func TestBackfillThroughTodayFillsTheDaysBeforeLaterStoredRates(t *testing.T) {
 
 		if want := new(big.Rat).Mul(rat(t, perEUR), big.NewRat(100, 1)); got.Amount.Cmp(want) != 0 || !got.RateDate.Equal(day(t, d)) || got.Provisional {
 			t.Errorf("1.00 EUR in RSD on %s = %+v, want %s at its own rate, not provisional", d, got, want.RatString())
+		}
+	}
+}
+
+func TestABackfillWhoseNewerChunkFailedFetchesItOnTheNextRun(t *testing.T) {
+	f := newFixture()
+	f.entries.earliest = day(t, "2025-10-14")
+	f.storeRSDDaily(t, "2026-01-12", "2026-01-12")
+
+	own := map[time.Time]*big.Rat{}
+
+	for d, i := day(t, "2025-10-01"), int64(0); d.Before(day(t, "2026-01-12")); d, i = d.AddDate(0, 0, 1), i+1 {
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			own[d] = big.NewRat(11700+i, 100)
+			f.provider.rates = append(f.provider.rates, fx.Rate{Currency: "RSD", Date: d, PerEUR: own[d]})
+		}
+	}
+
+	// The chunks are 2025-10-07 to 2026-01-06 and 2026-01-07 to 2026-01-11.
+	f.provider.failOnceOn = day(t, "2026-01-08")
+
+	if err := f.svc.BackfillFromEarliestEntry(t.Context(), day(t, "2026-01-12")); !errors.Is(err, errProviderDown) {
+		t.Fatalf("first backfill = %v, want the provider's error", err)
+	}
+
+	if err := f.svc.BackfillFromEarliestEntry(t.Context(), day(t, "2026-01-12")); err != nil {
+		t.Fatalf("second backfill: %v", err)
+	}
+
+	for _, d := range []string{"2025-10-14", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"} {
+		got, err := f.svc.Convert(t.Context(), 100, "EUR", "RSD", day(t, d))
+		if err != nil {
+			t.Fatalf("Convert on %s: %v", d, err)
+		}
+
+		want := new(big.Rat).Mul(own[day(t, d)], big.NewRat(100, 1))
+		if got.Amount.Cmp(want) != 0 || !got.RateDate.Equal(day(t, d)) {
+			t.Errorf("1.00 EUR in RSD on %s = %s at the rate of %s, want %s at its own rate",
+				d, got.Amount.RatString(), got.RateDate.Format(time.DateOnly), want.RatString())
 		}
 	}
 }
