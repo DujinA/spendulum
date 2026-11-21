@@ -41,11 +41,9 @@ type LatestUse struct {
 }
 
 type Matches struct {
-	// Match has the typed name's key, archived or not.
-	Match *Vendor
-	// Vendors are the unarchived ones whose key contains the typed key, most used first.
+	Match   *Vendor
 	Vendors []Vendor
-	// NearMatches are offered only when there is no match, so a typo does not make a second vendor.
+	// Offered only when there is no match, so a typo does not make a second vendor.
 	NearMatches []Vendor
 }
 

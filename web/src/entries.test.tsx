@@ -72,7 +72,7 @@ describe("entry list", () => {
     fakeSessionApi({ loggedIn: true });
     fakeEntriesApi({
       entries: [
-        fakeEntry({ entryDate: "2026-03-02", vendorId: "0195f3a2-0000-7000-8000-000000000099", vendorName: "Maxi", note: "weekly shop" }),
+        fakeEntry({ entryDate: "2026-03-02", vendorId: "0195f3a2-0000-7000-8000-000000000099", vendorName: "Maxi", note: "fruit and vegetables" }),
         fakeEntry({ entryDate: "2026-03-01", categoryName: eatingOut.name }),
       ],
     });
@@ -84,7 +84,7 @@ describe("entry list", () => {
         .getAllByRole("paragraph")
         .map((p) => p.textContent);
 
-    expect(lines("Today")).toEqual(["Maxi", "Groceries · weekly shop"]);
+    expect(lines("Today")).toEqual(["Maxi", "Groceries · fruit and vegetables"]);
     expect(lines("Yesterday")).toEqual(["Eating out"]);
   });
 

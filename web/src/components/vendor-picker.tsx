@@ -54,7 +54,8 @@ export function VendorPicker({
         className="px-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (data?.match) onPick(data.match);
+          // A match shown while the next answer loads is for an earlier name; the server matches a created name by key anyway.
+          if (data?.match && !isPlaceholderData) onPick(data.match);
           else if (name) onCreate(name);
         }}
       >

@@ -39,7 +39,7 @@ func matchName(m vendors.Matches) string {
 }
 
 func TestWithoutANameEveryUnarchivedVendorIsListedMostUsedFirst(t *testing.T) {
-	all := []vendors.Vendor{vendor("Lidl", 2), archived("Old shop"), vendor("Maxi", 9), vendor("Apoteka", 0), vendor("Kafeterija", 2)}
+	all := []vendors.Vendor{vendor("Lidl", 2), archived("Old bakery"), vendor("Maxi", 9), vendor("Apoteka", 0), vendor("Kafeterija", 2)}
 
 	got := vendors.Search(all, "")
 
