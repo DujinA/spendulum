@@ -7,7 +7,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// Of is the key that makes two names the same: NFD without combining marks, đ as d, lowercase, letters and digits only.
+// Of is the key two names are compared by: NFD with combining marks dropped, đ as d, lower case, letters and digits only.
 func Of(name string) string {
 	var b strings.Builder
 
@@ -15,7 +15,6 @@ func Of(name string) string {
 		switch {
 		case r == 'đ' || r == 'Đ':
 			b.WriteRune('d')
-		case unicode.Is(unicode.Mn, r):
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(unicode.ToLower(r))
 		}

@@ -66,11 +66,16 @@ export const testCurrencies: Currency[] = [
   { code: "USD", minorUnits: 2 },
 ];
 
-export const groceries: Category = { id: "0195f3a0-0000-7000-8000-000000000001", kind: "expense", name: "Groceries" };
-export const eatingOut: Category = { id: "0195f3a0-0000-7000-8000-000000000002", kind: "expense", name: "Eating out" };
-export const otherExpense: Category = { id: "0195f3a0-0000-7000-8000-000000000003", kind: "expense", name: "Other" };
-export const salary: Category = { id: "0195f3a0-0000-7000-8000-000000000004", kind: "income", name: "Salary" };
-export const otherIncome: Category = { id: "0195f3a0-0000-7000-8000-000000000005", kind: "income", name: "Other" };
+function fakeCategory(id: number, kind: Category["kind"], name: string, fields: Partial<Category> = {}): Category {
+  return { id: `0195f3a0-0000-7000-8000-${String(id).padStart(12, "0")}`, kind, name, note: "", archived: false, ...fields };
+}
+
+export const groceries = fakeCategory(1, "expense", "Groceries", { note: "Food and drugstore" });
+export const eatingOut = fakeCategory(2, "expense", "Eating out");
+export const otherExpense = fakeCategory(3, "expense", "Other");
+export const salary = fakeCategory(4, "income", "Salary");
+export const otherIncome = fakeCategory(5, "income", "Other");
+export const oldHobby = fakeCategory(6, "expense", "Old hobby", { archived: true });
 
 export interface FakeEntriesOptions {
   settings?: Settings;
@@ -88,16 +93,6 @@ let nextVendorId = 1;
 export function fakeVendor(fields: Partial<Vendor> & Pick<Vendor, "name">): Vendor {
   const id = `0195f3a2-0000-7000-8000-${String(nextVendorId++).padStart(12, "0")}`;
   return { id, archived: false, useCount: 0, ...fields };
-}
-
-// A stand-in for the server's name key: lowercase, no diacritics, letters and digits only.
-function nameKey(name: string) {
-  return name
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .replace(/[đĐ]/g, "d")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 export interface CreateRequest {
@@ -240,6 +235,107 @@ export function fakeEntriesApi({
       state.entries.push(entry);
       if (idempotencyKey !== null) byKey.set(idempotencyKey, entry);
       return HttpResponse.json<Entry>(entry, { status: 201 });
+    }),
+  );
+
+  return state;
+}
+
+type NewCategory = components["schemas"]["NewCategory"];
+type CategoryChange = components["schemas"]["CategoryChange"];
+type CategoryOrder = components["schemas"]["CategoryOrder"];
+
+// The same key as the server's namekey.Of, so the fake refuses the same names.
+function nameKey(name: string) {
+  return name.normalize("NFD").replace(/[đĐ]/g, "d").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+}
+
+export interface FakeCategoriesOptions {
+  categories?: Category[];
+  // Ids of categories that have entries, so deleting them answers 409.
+  inUse?: string[];
+}
+
+// A fake categories API that keeps its own state: expense categories first, each kind in manual order.
+export function fakeCategoriesApi({
+  categories = [groceries, eatingOut, otherExpense, oldHobby, salary, otherIncome],
+  inUse = [],
+}: FakeCategoriesOptions = {}) {
+  const state = {
+    categories: categories.map((c) => ({ ...c })),
+    creates: [] as { idempotencyKey: string | null; body: NewCategory }[],
+    changes: [] as { id: string; body: CategoryChange }[],
+    orders: [] as CategoryOrder[],
+    deletes: [] as string[],
+    failOrders: 0,
+    // Holds every order response until the returned function is called.
+    holdOrders() {
+      let release: () => void = () => undefined;
+      heldOrders = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        heldOrders = undefined;
+        release();
+      };
+    },
+  };
+  let heldOrders: Promise<void> | undefined;
+  let nextCategory = 100;
+
+  const listed = (withArchived: boolean) =>
+    [...state.categories.filter((c) => c.kind === "expense"), ...state.categories.filter((c) => c.kind === "income")].filter(
+      (c) => withArchived || !c.archived,
+    );
+  const nameTaken = (kind: Category["kind"], name: string, exceptId?: string) => {
+    const existing = state.categories.find((c) => c.kind === kind && c.id !== exceptId && nameKey(c.name) === nameKey(name));
+    return existing && problem(422, "Unprocessable Content", `An ${kind} category named “${existing.name}” already exists.`);
+  };
+
+  server.use(
+    http.get("*/api/categories", ({ request }) =>
+      HttpResponse.json<Category[]>(listed(new URL(request.url).searchParams.get("includeArchived") === "true")),
+    ),
+    http.post<never, NewCategory>("*/api/categories", async ({ request }) => {
+      const body = await request.json();
+      state.creates.push({ idempotencyKey: request.headers.get("Idempotency-Key"), body });
+      const taken = nameTaken(body.kind, body.name);
+      if (taken) return taken;
+      const created = fakeCategory(nextCategory++, body.kind, body.name.trim(), { note: body.note?.trim() ?? "" });
+      state.categories.push(created);
+      return HttpResponse.json<Category>(created, { status: 201 });
+    }),
+    http.patch<{ id: string }, CategoryChange>("*/api/categories/:id", async ({ request, params }) => {
+      const body = await request.json();
+      state.changes.push({ id: params.id, body });
+      const category = state.categories.find((c) => c.id === params.id);
+      if (!category) return problem(404, "Not Found", "");
+      const taken = body.name === undefined ? undefined : nameTaken(category.kind, body.name, category.id);
+      if (taken) return taken;
+      if (body.name !== undefined) category.name = body.name.trim();
+      if (body.note !== undefined) category.note = body.note.trim();
+      if (body.archived !== undefined) category.archived = body.archived;
+      return HttpResponse.json<Category>(category);
+    }),
+    http.delete<{ id: string }>("*/api/categories/:id", ({ params }) => {
+      state.deletes.push(params.id);
+      if (inUse.includes(params.id)) {
+        return problem(409, "Conflict", "This category has entries, so it cannot be deleted. Archive it instead.");
+      }
+      state.categories = state.categories.filter((c) => c.id !== params.id);
+      return new HttpResponse(null, { status: 204 });
+    }),
+    http.put<never, CategoryOrder>("*/api/categories/order", async ({ request }) => {
+      const body = await request.json();
+      state.orders.push(body);
+      await heldOrders;
+      if (state.failOrders > 0) {
+        state.failOrders--;
+        return problem(503, "Service Unavailable", "");
+      }
+      const ordered = body.ids.map((id) => state.categories.find((c) => c.id === id)).filter((c) => c !== undefined);
+      state.categories = [...state.categories.filter((c) => c.kind !== body.kind), ...ordered];
+      return new HttpResponse(null, { status: 204 });
     }),
   );
 

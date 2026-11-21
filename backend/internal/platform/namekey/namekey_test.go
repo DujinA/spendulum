@@ -6,17 +6,17 @@ import (
 	"github.com/DujinA/spendulum/backend/internal/platform/namekey"
 )
 
-func TestOfIgnoresCaseDiacriticsSpacesAndPunctuation(t *testing.T) {
+func TestNamesThatDifferOnlyInCaseDiacriticsSpacesAndPunctuationShareAKey(t *testing.T) {
 	for name, want := range map[string]string{
-		"Maxi":           "maxi",
-		"maxi ":          "maxi",
-		"MAXI":           "maxi",
-		"Kafana Šljivik": "kafanasljivik",
-		"Ćevabdžinica":   "cevabdzinica",
-		"Đurđevak":       "durdevak",
-		"Pekara-Zora!":   "pekarazora",
-		"7 Eleven":       "7eleven",
-		"  ":             "",
+		"Kafići":               "kafici",
+		"kafici ":              "kafici",
+		"KAFICI!":              "kafici",
+		"Đak":                  "dak",
+		"đak":                  "dak",
+		"Café-Bar No. 2":       "cafebarno2",
+		"Ćevapi & Pljeskavica": "cevapipljeskavica",
+		"Кафана":               "кафана",
+		"!!!":                  "",
 	} {
 		if got := namekey.Of(name); got != want {
 			t.Errorf("Of(%q) = %q, want %q", name, got, want)

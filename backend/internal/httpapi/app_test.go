@@ -58,7 +58,8 @@ func newApp(t *testing.T, opts ...appOption) *app {
 	a := &app{db: d, logs: &syncBuffer{}, now: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)}
 	logger := slog.New(slog.NewJSONHandler(a.logs, nil))
 	settingsSvc := settings.NewService(settings.NewPostgres(d.Queries()))
-	categorySvc := category.NewService(category.NewPostgres(d.Queries()))
+	categoryRepo := category.NewPostgres(d.Queries())
+	categorySvc := category.NewService(category.Deps{Repo: categoryRepo, Keys: categoryRepo, Tx: d, Now: a.clock})
 	vendorSvc := vendors.NewService(vendors.NewPostgres(d.Queries()))
 
 	a.auth = auth.NewService(auth.Deps{
