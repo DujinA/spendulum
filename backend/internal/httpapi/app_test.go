@@ -14,9 +14,13 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/category"
+	"github.com/DujinA/spendulum/backend/internal/entry"
 	"github.com/DujinA/spendulum/backend/internal/httpapi"
+	"github.com/DujinA/spendulum/backend/internal/platform/db"
 	"github.com/DujinA/spendulum/backend/internal/platform/db/dbtest"
 	"github.com/DujinA/spendulum/backend/internal/settings"
 	"github.com/DujinA/spendulum/backend/internal/webui"
@@ -32,6 +36,7 @@ const (
 
 type app struct {
 	handler http.Handler
+	db      *db.DB
 	auth    *auth.Service
 	logs    *syncBuffer
 	now     time.Time
@@ -48,26 +53,30 @@ func newApp(t *testing.T, opts ...appOption) *app {
 	t.Helper()
 
 	d := dbtest.Open(t)
-	a := &app{logs: &syncBuffer{}, now: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)}
+	a := &app{db: d, logs: &syncBuffer{}, now: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)}
 	logger := slog.New(slog.NewJSONHandler(a.logs, nil))
+	settingsSvc := settings.NewService(settings.NewPostgres(d.Queries()))
+	categorySvc := category.NewService(category.NewPostgres(d.Queries()))
 
 	a.auth = auth.NewService(auth.Deps{
-		Repo:    auth.NewPostgres(d.Queries()),
-		Tx:      d,
-		Hasher:  auth.NewHasher(),
-		Limiter: auth.NewLimiter(),
-		Defaults: []auth.AccountDefaults{
-			settings.NewService(settings.NewPostgres(d.Queries())),
-			category.NewService(category.NewPostgres(d.Queries())),
-		},
-		Now: a.clock,
+		Repo:     auth.NewPostgres(d.Queries()),
+		Tx:       d,
+		Hasher:   auth.NewHasher(),
+		Limiter:  auth.NewLimiter(),
+		Defaults: []auth.AccountDefaults{settingsSvc, categorySvc},
+		Now:      a.clock,
 	})
 
 	deps := httpapi.Deps{
-		DB:     d,
-		WebUI:  webui.Handler(fstest.MapFS{"index.html": {Data: []byte(indexHTML)}, "assets/app-abc.js": {Data: []byte("console.log('app')")}}),
-		Logger: logger,
-		Auth:   auth.NewHandler(a.auth, logger, true, []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16")}),
+		DB:         d,
+		WebUI:      webui.Handler(fstest.MapFS{"index.html": {Data: []byte(indexHTML)}, "assets/app-abc.js": {Data: []byte("console.log('app')")}}),
+		Logger:     logger,
+		Auth:       auth.NewHandler(a.auth, logger, true, []netip.Prefix{netip.MustParsePrefix("10.42.0.0/16")}),
+		Settings:   settings.NewHandler(settingsSvc),
+		Categories: category.NewHandler(categorySvc),
+		Entries: entry.NewHandler(entry.NewService(entry.Deps{
+			Repo: entry.NewPostgres(d.Queries()), Tx: d, Settings: settingsSvc, Now: a.clock,
+		}), logger),
 	}
 	for _, o := range opts {
 		o(&deps)
@@ -92,22 +101,48 @@ func (a *app) advance(d time.Duration) {
 	a.now = a.now.Add(d)
 }
 
-func (a *app) account(t *testing.T) {
+func (a *app) account(t *testing.T) uuid.UUID {
 	t.Helper()
 
-	if _, err := a.auth.CreateAccount(t.Context(), email, password); err != nil {
+	return a.accountFor(t, email)
+}
+
+func (a *app) accountFor(t *testing.T, email string) uuid.UUID {
+	t.Helper()
+
+	id, err := a.auth.CreateAccount(t.Context(), email, password)
+	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
+
+	return id
 }
 
 // login logs in and returns the session cookie.
 func (a *app) login(t *testing.T) *http.Cookie {
 	t.Helper()
 
+	return a.loginAs(t, email)
+}
+
+func (a *app) loginAs(t *testing.T, email string) *http.Cookie {
+	t.Helper()
+
 	res := a.do(t, request{method: http.MethodPost, path: "/api/session", json: credentials(email, password)})
 	assertStatus(t, res, http.StatusNoContent)
 
 	return sessionCookie(t, res)
+}
+
+func (a *app) addCategory(t *testing.T, userID uuid.UUID, c category.Category) category.Category {
+	t.Helper()
+
+	c.ID = uuid.Must(uuid.NewV7())
+	if err := category.NewPostgres(a.db.Queries()).Create(t.Context(), userID, c); err != nil {
+		t.Fatalf("create category: %v", err)
+	}
+
+	return c
 }
 
 type request struct {

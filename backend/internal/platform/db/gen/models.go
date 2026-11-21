@@ -17,6 +17,27 @@ type Category struct {
 	Name      string
 	Position  int32
 	CreatedAt time.Time
+	Archived  bool
+}
+
+type Entry struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	Kind       string
+	Amount     int64
+	Currency   string
+	CategoryID uuid.UUID
+	EntryDate  time.Time
+	Note       string
+	CreatedAt  time.Time
+}
+
+type IdempotencyKey struct {
+	UserID      uuid.UUID
+	Key         string
+	RequestHash []byte
+	EntryID     uuid.UUID
+	CreatedAt   time.Time
 }
 
 type Session struct {

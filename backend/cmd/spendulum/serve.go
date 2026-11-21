@@ -9,10 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/DujinA/spendulum/backend/internal/auth"
 	"github.com/DujinA/spendulum/backend/internal/httpapi"
 	"github.com/DujinA/spendulum/backend/internal/platform/db"
-	"github.com/DujinA/spendulum/backend/internal/webui"
 )
 
 var errPendingMigrations = errors.New("the database has pending migrations: run spendulum migrate first")
@@ -37,12 +35,7 @@ func serve(ctx context.Context, inv invocation) error {
 	}
 
 	srv := &http.Server{
-		Handler: httpapi.NewHandler(httpapi.Deps{
-			DB:     d,
-			WebUI:  webui.Handler(webui.FS()),
-			Logger: logger,
-			Auth:   auth.NewHandler(newAuthService(d), logger, cfg.CookieSecure, cfg.TrustedProxies),
-		}),
+		Handler:           httpapi.NewHandler(newAPIDeps(d, cfg, logger)),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

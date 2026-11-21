@@ -20,6 +20,10 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
+func (s *Service) Get(ctx context.Context, userID uuid.UUID) (Settings, error) {
+	return s.repo.Get(ctx, userID) //nolint:wrapcheck // the repository already says what failed
+}
+
 func (s *Service) CreateDefaults(ctx context.Context, userID uuid.UUID) error {
 	if err := s.repo.Create(ctx, userID, Defaults()); err != nil {
 		return fmt.Errorf("settings: create defaults: %w", err)

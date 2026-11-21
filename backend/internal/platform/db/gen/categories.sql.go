@@ -12,7 +12,7 @@ import (
 )
 
 const categories = `-- name: Categories :many
-SELECT id, kind, name, position FROM categories WHERE user_id = $1 ORDER BY kind, position, created_at
+SELECT id, kind, name, position, archived FROM categories WHERE user_id = $1 ORDER BY kind, position, created_at
 `
 
 type CategoriesRow struct {
@@ -20,6 +20,7 @@ type CategoriesRow struct {
 	Kind     string
 	Name     string
 	Position int32
+	Archived bool
 }
 
 func (q *Queries) Categories(ctx context.Context, userID uuid.UUID) ([]CategoriesRow, error) {
@@ -36,6 +37,7 @@ func (q *Queries) Categories(ctx context.Context, userID uuid.UUID) ([]Categorie
 			&i.Kind,
 			&i.Name,
 			&i.Position,
+			&i.Archived,
 		); err != nil {
 			return nil, err
 		}
@@ -48,7 +50,7 @@ func (q *Queries) Categories(ctx context.Context, userID uuid.UUID) ([]Categorie
 }
 
 const createCategory = `-- name: CreateCategory :exec
-INSERT INTO categories (id, user_id, kind, name, position) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO categories (id, user_id, kind, name, position, archived) VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateCategoryParams struct {
@@ -57,6 +59,7 @@ type CreateCategoryParams struct {
 	Kind     string
 	Name     string
 	Position int32
+	Archived bool
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
@@ -66,6 +69,45 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.Kind,
 		arg.Name,
 		arg.Position,
+		arg.Archived,
 	)
 	return err
+}
+
+const unarchivedCategories = `-- name: UnarchivedCategories :many
+SELECT id, kind, name, position, archived FROM categories WHERE user_id = $1 AND NOT archived ORDER BY kind, position, created_at
+`
+
+type UnarchivedCategoriesRow struct {
+	ID       uuid.UUID
+	Kind     string
+	Name     string
+	Position int32
+	Archived bool
+}
+
+func (q *Queries) UnarchivedCategories(ctx context.Context, userID uuid.UUID) ([]UnarchivedCategoriesRow, error) {
+	rows, err := q.db.Query(ctx, unarchivedCategories, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UnarchivedCategoriesRow{}
+	for rows.Next() {
+		var i UnarchivedCategoriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Name,
+			&i.Position,
+			&i.Archived,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
