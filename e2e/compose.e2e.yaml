@@ -28,7 +28,7 @@ services:
 
   # Placeholder for the Frankfurter stub; see stubs/rates/README.md.
   rates:
-    image: busybox:1.37
+    image: busybox:1.38
     command: ["httpd", "-f", "-p", "8080", "-h", "/srv"]
     volumes:
       - ./stubs/rates:/srv:ro
