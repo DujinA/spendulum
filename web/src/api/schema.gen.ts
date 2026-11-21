@@ -141,6 +141,39 @@ export interface paths {
         patch: operations["updateCategory"];
         trace?: never;
     };
+    "/api/vendors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The vendors the Vendor sheet offers
+         * @description The user's vendors for an entry of the given kind, each with its number
+         *     of entries of that kind and the category and currency of the latest one.
+         *     Names are compared by their key: lowercase, without diacritics, letters
+         *     and digits only.
+         *
+         *     Without `name`, `vendors` holds every vendor that is not archived, most
+         *     used first. With `name`:
+         *     - `match` is the vendor with the same key, archived or not;
+         *     - `vendors` are the other vendors that are not archived and whose key
+         *       contains the name's key, most used first;
+         *     - `nearMatches`, only when there is no match and the key has at least 4
+         *       characters, are up to 3 other vendors, archived or not, whose key is
+         *       within Damerau-Levenshtein distance 2 (an adjacent swap counts as 1),
+         *       closest first.
+         */
+        get: operations["listVendors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/currencies": {
         parameters: {
             query?: never;
@@ -181,6 +214,10 @@ export interface paths {
          * @description Records the entry in the user's primary currency. An income amount must
          *     be more than 0 and an expense amount must not be 0; a negative expense
          *     is a refund. The note is stored trimmed.
+         *
+         *     A `vendorName` with the same key as one of the user's vendors names that
+         *     vendor and unarchives it; any other name creates a vendor together with
+         *     the entry. A refused entry creates no vendor.
          *
          *     A retry with the same `Idempotency-Key` and body answers the entry the
          *     first request created, and creates no other. The same key with a
@@ -304,6 +341,8 @@ export interface components {
              * @description A category of the same kind.
              */
             categoryId: string;
+            /** @description Who the expense was paid to or the income came from. Absent or blank means no vendor. */
+            vendorName?: string;
             /** Format: date */
             entryDate: string;
             note?: string;
@@ -322,6 +361,13 @@ export interface components {
             /** Format: uuid */
             categoryId: string;
             categoryName: string;
+            /**
+             * Format: uuid
+             * @description Absent when the entry has no vendor.
+             */
+            vendorId?: string;
+            /** @description Absent when the entry has no vendor. */
+            vendorName?: string;
             /** Format: date */
             entryDate: string;
             /** @description Empty when the entry has no note. */
@@ -333,6 +379,31 @@ export interface components {
             entries: components["schemas"]["Entry"][];
             /** @description Absent on the last page. */
             nextCursor?: string;
+        };
+        Vendor: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            archived: boolean;
+            /** @description The number of the user's entries of the requested kind with this vendor. */
+            useCount: number;
+            latest?: components["schemas"]["LatestUse"];
+        };
+        /**
+         * @description The category and currency of the vendor's latest entry of the requested
+         *     kind, latest by entry date, then creation time. Absent when it has none.
+         */
+        LatestUse: {
+            /** Format: uuid */
+            categoryId: string;
+            categoryName: string;
+            /** @description ISO 4217 code. */
+            currency: string;
+        };
+        VendorMatches: {
+            match?: components["schemas"]["Vendor"];
+            vendors: components["schemas"]["Vendor"][];
+            nearMatches: components["schemas"]["Vendor"][];
         };
         Credentials: {
             email: string;
@@ -669,6 +740,33 @@ export interface operations {
             404: components["responses"]["NotFound"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
+        };
+    };
+    listVendors: {
+        parameters: {
+            query: {
+                /** @description The kind of the entry being recorded; use counts and the latest entry are of this kind. */
+                kind: components["schemas"]["Kind"];
+                /** @description The name typed in the Vendor sheet. */
+                name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The vendors that match the name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VendorMatches"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     listCurrencies: {

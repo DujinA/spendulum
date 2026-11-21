@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DujinA/spendulum/backend/internal/category"
+	"github.com/DujinA/spendulum/backend/internal/platform/namekey"
 )
 
 const KeyLifetime = 24 * time.Hour
@@ -27,6 +28,7 @@ const (
 	ErrUnknownCategory   RuleError = "The category does not exist or is of the other kind."
 	ErrEntryDateRequired RuleError = "An entry date is required."
 	ErrKeyReused         RuleError = "This Idempotency-Key was already used for a different entry."
+	ErrVendorNameBlank   RuleError = "A vendor name needs at least one letter or digit."
 )
 
 var ErrNotFound = errors.New("entry: not found")
@@ -38,21 +40,27 @@ type Entry struct {
 	Currency     string
 	CategoryID   uuid.UUID
 	CategoryName string
+	VendorID     uuid.UUID
+	VendorName   string
 	EntryDate    time.Time
 	Note         string
 	CreatedAt    time.Time
 }
 
-// NewEntry is what the user records; the currency is the user's primary currency.
+// NewEntry is what the user records; the currency is the user's primary currency, and an empty vendor name is no vendor.
 type NewEntry struct {
 	Kind       category.Kind
 	Amount     int64
 	CategoryID uuid.UUID
+	VendorName string
 	EntryDate  time.Time
 	Note       string
 }
 
 func (n NewEntry) normalized() (NewEntry, error) {
+	n.VendorName = strings.TrimSpace(n.VendorName)
+	n.Note = strings.TrimSpace(n.Note)
+
 	switch {
 	case n.Kind != category.Expense && n.Kind != category.Income:
 		return NewEntry{}, ErrUnknownKind
@@ -66,9 +74,9 @@ func (n NewEntry) normalized() (NewEntry, error) {
 		return NewEntry{}, ErrCategoryRequired
 	case n.EntryDate.IsZero():
 		return NewEntry{}, ErrEntryDateRequired
+	case n.VendorName != "" && namekey.Of(n.VendorName) == "":
+		return NewEntry{}, ErrVendorNameBlank
 	}
-
-	n.Note = strings.TrimSpace(n.Note)
 
 	return n, nil
 }
@@ -83,6 +91,13 @@ func (n NewEntry) fingerprint() []byte {
 	h.Write([]byte(n.EntryDate.Format(time.DateOnly)))
 	h.Write([]byte{0})
 	h.Write([]byte(n.Note))
+
+	// Appended only when set, so a request without a vendor keeps the hash keys stored before vendors existed.
+	if n.VendorName != "" {
+		h.Write([]byte{0})
+		h.Write([]byte(n.VendorName))
+		h.Write([]byte{0})
+	}
 
 	return h.Sum(nil)
 }

@@ -13,8 +13,8 @@ import (
 )
 
 const createEntry = `-- name: CreateEntry :exec
-INSERT INTO entries (id, user_id, kind, amount, currency, category_id, entry_date, note, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO entries (id, user_id, kind, amount, currency, category_id, vendor_id, entry_date, note, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 `
 
 type CreateEntryParams struct {
@@ -24,6 +24,7 @@ type CreateEntryParams struct {
 	Amount     int64
 	Currency   string
 	CategoryID uuid.UUID
+	VendorID   *uuid.UUID
 	EntryDate  time.Time
 	Note       string
 	CreatedAt  time.Time
@@ -37,6 +38,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) error 
 		arg.Amount,
 		arg.Currency,
 		arg.CategoryID,
+		arg.VendorID,
 		arg.EntryDate,
 		arg.Note,
 		arg.CreatedAt,
@@ -99,9 +101,11 @@ func (q *Queries) EarliestEntryDate(ctx context.Context) (time.Time, error) {
 }
 
 const entries = `-- name: Entries :many
-SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.entry_date, e.note, e.created_at
+SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.vendor_id, v.name AS vendor_name,
+    e.entry_date, e.note, e.created_at
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
+LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
 WHERE e.user_id = $1
 ORDER BY e.entry_date DESC, e.created_at DESC, e.id DESC
 LIMIT $2
@@ -119,6 +123,8 @@ type EntriesRow struct {
 	Currency     string
 	CategoryID   uuid.UUID
 	CategoryName string
+	VendorID     *uuid.UUID
+	VendorName   *string
 	EntryDate    time.Time
 	Note         string
 	CreatedAt    time.Time
@@ -140,6 +146,8 @@ func (q *Queries) Entries(ctx context.Context, arg EntriesParams) ([]EntriesRow,
 			&i.Currency,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.VendorID,
+			&i.VendorName,
 			&i.EntryDate,
 			&i.Note,
 			&i.CreatedAt,
@@ -155,9 +163,11 @@ func (q *Queries) Entries(ctx context.Context, arg EntriesParams) ([]EntriesRow,
 }
 
 const entriesAfter = `-- name: EntriesAfter :many
-SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.entry_date, e.note, e.created_at
+SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.vendor_id, v.name AS vendor_name,
+    e.entry_date, e.note, e.created_at
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
+LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
 WHERE e.user_id = $1
     AND (e.entry_date, e.created_at, e.id) < ($2::date, $3::timestamptz, $4::uuid)
 ORDER BY e.entry_date DESC, e.created_at DESC, e.id DESC
@@ -179,6 +189,8 @@ type EntriesAfterRow struct {
 	Currency     string
 	CategoryID   uuid.UUID
 	CategoryName string
+	VendorID     *uuid.UUID
+	VendorName   *string
 	EntryDate    time.Time
 	Note         string
 	CreatedAt    time.Time
@@ -206,6 +218,8 @@ func (q *Queries) EntriesAfter(ctx context.Context, arg EntriesAfterParams) ([]E
 			&i.Currency,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.VendorID,
+			&i.VendorName,
 			&i.EntryDate,
 			&i.Note,
 			&i.CreatedAt,
@@ -221,9 +235,11 @@ func (q *Queries) EntriesAfter(ctx context.Context, arg EntriesAfterParams) ([]E
 }
 
 const entry = `-- name: Entry :one
-SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.entry_date, e.note, e.created_at
+SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_name, e.vendor_id, v.name AS vendor_name,
+    e.entry_date, e.note, e.created_at
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
+LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
 WHERE e.user_id = $1 AND e.id = $2
 `
 
@@ -239,6 +255,8 @@ type EntryRow struct {
 	Currency     string
 	CategoryID   uuid.UUID
 	CategoryName string
+	VendorID     *uuid.UUID
+	VendorName   *string
 	EntryDate    time.Time
 	Note         string
 	CreatedAt    time.Time
@@ -254,6 +272,8 @@ func (q *Queries) Entry(ctx context.Context, arg EntryParams) (EntryRow, error) 
 		&i.Currency,
 		&i.CategoryID,
 		&i.CategoryName,
+		&i.VendorID,
+		&i.VendorName,
 		&i.EntryDate,
 		&i.Note,
 		&i.CreatedAt,

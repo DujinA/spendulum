@@ -258,6 +258,49 @@ paths:
           $ref: "#/components/responses/Conflict"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+  /api/vendors:
+    get:
+      operationId: listVendors
+      summary: The vendors the Vendor sheet offers
+      description: |
+        The user's vendors for an entry of the given kind, each with its number
+        of entries of that kind and the category and currency of the latest one.
+        Names are compared by their key: lowercase, without diacritics, letters
+        and digits only.
+
+        Without `name`, `vendors` holds every vendor that is not archived, most
+        used first. With `name`:
+        - `match` is the vendor with the same key, archived or not;
+        - `vendors` are the other vendors that are not archived and whose key
+          contains the name's key, most used first;
+        - `nearMatches`, only when there is no match and the key has at least 4
+          characters, are up to 3 other vendors, archived or not, whose key is
+          within Damerau-Levenshtein distance 2 (an adjacent swap counts as 1),
+          closest first.
+      tags: [vendors]
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          description: The kind of the entry being recorded; use counts and the latest entry are of this kind.
+          schema:
+            $ref: "#/components/schemas/Kind"
+        - name: name
+          in: query
+          description: The name typed in the Vendor sheet.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The vendors that match the name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorMatches"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/currencies:
     get:
       operationId: listCurrencies
@@ -316,6 +359,10 @@ paths:
         Records the entry in the user's primary currency. An income amount must
         be more than 0 and an expense amount must not be 0; a negative expense
         is a refund. The note is stored trimmed.
+
+        A `vendorName` with the same key as one of the user's vendors names that
+        vendor and unarchives it; any other name creates a vendor together with
+        the entry. A refused entry creates no vendor.
 
         A retry with the same `Idempotency-Key` and body answers the entry the
         first request created, and creates no other. The same key with a
@@ -550,6 +597,9 @@ components:
           type: string
           format: uuid
           description: A category of the same kind.
+        vendorName:
+          type: string
+          description: Who the expense was paid to or the income came from. Absent or blank means no vendor.
         entryDate:
           type: string
           format: date
@@ -576,6 +626,13 @@ components:
           format: uuid
         categoryName:
           type: string
+        vendorId:
+          type: string
+          format: uuid
+          description: Absent when the entry has no vendor.
+        vendorName:
+          type: string
+          description: Absent when the entry has no vendor.
         entryDate:
           type: string
           format: date
@@ -596,6 +653,51 @@ components:
         nextCursor:
           type: string
           description: Absent on the last page.
+    Vendor:
+      type: object
+      required: [id, name, archived, useCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        archived:
+          type: boolean
+        useCount:
+          type: integer
+          description: The number of the user's entries of the requested kind with this vendor.
+        latest:
+          $ref: "#/components/schemas/LatestUse"
+    LatestUse:
+      type: object
+      description: |
+        The category and currency of the vendor's latest entry of the requested
+        kind, latest by entry date, then creation time. Absent when it has none.
+      required: [categoryId, categoryName, currency]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        categoryName:
+          type: string
+        currency:
+          type: string
+          description: ISO 4217 code.
+    VendorMatches:
+      type: object
+      required: [vendors, nearMatches]
+      properties:
+        match:
+          $ref: "#/components/schemas/Vendor"
+        vendors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Vendor"
+        nearMatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Vendor"
     Credentials:
       type: object
       required: [email, password]

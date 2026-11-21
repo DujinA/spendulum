@@ -35,17 +35,13 @@ func NewHandler(svc *Service, logger *slog.Logger) Handler {
 func (h Handler) CreateEntry(ctx context.Context, req gen.CreateEntryRequestObject) (gen.CreateEntryResponseObject, error) {
 	session, _ := auth.SessionFrom(ctx)
 
-	var note string
-	if req.Body.Note != nil {
-		note = *req.Body.Note
-	}
-
 	e, err := h.svc.Create(ctx, session.UserID, req.Params.IdempotencyKey, NewEntry{
 		Kind:       category.Kind(req.Body.Kind),
 		Amount:     req.Body.Amount,
 		CategoryID: req.Body.CategoryId,
+		VendorName: valueOf(req.Body.VendorName),
 		EntryDate:  req.Body.EntryDate.Time,
-		Note:       note,
+		Note:       valueOf(req.Body.Note),
 	})
 
 	if rule, ok := errors.AsType[RuleError](err); ok {
@@ -132,11 +128,25 @@ func listBadRequest(detail string) gen.ListEntries400ApplicationProblemPlusJSONR
 }
 
 func toJSON(e Entry) gen.Entry {
-	return gen.Entry{
+	out := gen.Entry{
 		Id: e.ID, Kind: gen.Kind(e.Kind), Amount: e.Amount, Currency: e.Currency,
 		CategoryId: e.CategoryID, CategoryName: e.CategoryName, EntryDate: openapi_types.Date{Time: e.EntryDate},
 		Note: e.Note, CreatedAt: e.CreatedAt,
 	}
+
+	if e.VendorID != uuid.Nil {
+		out.VendorId, out.VendorName = &e.VendorID, &e.VendorName
+	}
+
+	return out
+}
+
+func valueOf(s *string) string {
+	if s == nil {
+		return ""
+	}
+
+	return *s
 }
 
 func encodeCursor(c Cursor) string {

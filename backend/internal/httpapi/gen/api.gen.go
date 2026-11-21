@@ -107,6 +107,12 @@ type Entry struct {
 
 	// Note Empty when the entry has no note.
 	Note string `json:"note"`
+
+	// VendorId Absent when the entry has no vendor.
+	VendorId *openapi_types.UUID `json:"vendorId,omitempty"`
+
+	// VendorName Absent when the entry has no vendor.
+	VendorName *string `json:"vendorName,omitempty"`
 }
 
 // EntryPage defines model for EntryPage.
@@ -119,6 +125,16 @@ type EntryPage struct {
 
 // Kind defines model for Kind.
 type Kind string
+
+// LatestUse The category and currency of the vendor's latest entry of the requested
+// kind, latest by entry date, then creation time. Absent when it has none.
+type LatestUse struct {
+	CategoryId   openapi_types.UUID `json:"categoryId"`
+	CategoryName string             `json:"categoryName"`
+
+	// Currency ISO 4217 code.
+	Currency string `json:"currency"`
+}
 
 // NewCategory defines model for NewCategory.
 type NewCategory struct {
@@ -137,6 +153,9 @@ type NewEntry struct {
 	EntryDate  openapi_types.Date `json:"entryDate"`
 	Kind       Kind               `json:"kind"`
 	Note       *string            `json:"note,omitempty"`
+
+	// VendorName Who the expense was paid to or the income came from. Absent or blank means no vendor.
+	VendorName *string `json:"vendorName,omitempty"`
 }
 
 // ProbeStatus defines model for ProbeStatus.
@@ -178,6 +197,27 @@ type Settings struct {
 
 	// TimeZone The IANA time zone that decides "today".
 	TimeZone string `json:"timeZone"`
+}
+
+// Vendor defines model for Vendor.
+type Vendor struct {
+	Archived bool               `json:"archived"`
+	Id       openapi_types.UUID `json:"id"`
+
+	// Latest The category and currency of the vendor's latest entry of the requested
+	// kind, latest by entry date, then creation time. Absent when it has none.
+	Latest *LatestUse `json:"latest,omitempty"`
+	Name   string     `json:"name"`
+
+	// UseCount The number of the user's entries of the requested kind with this vendor.
+	UseCount int `json:"useCount"`
+}
+
+// VendorMatches defines model for VendorMatches.
+type VendorMatches struct {
+	Match       *Vendor  `json:"match,omitempty"`
+	NearMatches []Vendor `json:"nearMatches"`
+	Vendors     []Vendor `json:"vendors"`
 }
 
 // IdempotencyKey defines model for IdempotencyKey.
@@ -226,6 +266,15 @@ type ListEntriesParams struct {
 type CreateEntryParams struct {
 	// IdempotencyKey A key the client makes when the form opens and sends again on every retry.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ListVendorsParams defines parameters for ListVendors.
+type ListVendorsParams struct {
+	// Kind The kind of the entry being recorded; use counts and the latest entry are of this kind.
+	Kind Kind `form:"kind" json:"kind"`
+
+	// Name The name typed in the Vendor sheet.
+	Name *string `form:"name,omitempty" json:"name,omitempty"`
 }
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
@@ -284,6 +333,9 @@ type ServerInterface interface {
 	// GetSettings The user's settings
 	// (GET /api/settings)
 	GetSettings(w http.ResponseWriter, r *http.Request)
+	// ListVendors The vendors the Vendor sheet offers
+	// (GET /api/vendors)
+	ListVendors(w http.ResponseWriter, r *http.Request, params ListVendorsParams)
 	// GetHealthz Liveness probe
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -632,6 +684,52 @@ func (siw *ServerInterfaceWrapper) GetSettings(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ListVendors operation middleware
+func (siw *ServerInterfaceWrapper) ListVendors(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListVendorsParams
+
+	// ------------- Required query parameter "kind" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "kind", r.URL.Query(), &params.Kind, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "kind"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "name" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "name", r.URL.Query(), &params.Name, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "name"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListVendors(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetHealthz operation middleware
 func (siw *ServerInterfaceWrapper) GetHealthz(w http.ResponseWriter, r *http.Request) {
 
@@ -789,6 +887,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/categories/order", wrapper.ReorderCategories)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/categories/{id}", wrapper.DeleteCategory)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/categories/{id}", wrapper.UpdateCategory)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/vendors", wrapper.ListVendors)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/currencies", wrapper.ListCurrencies)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/entries", wrapper.ListEntries)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/entries", wrapper.CreateEntry)
@@ -1714,6 +1813,60 @@ func (response GetSettings401ApplicationProblemPlusJSONResponse) VisitGetSetting
 	return err
 }
 
+type ListVendorsRequestObject struct {
+	Params ListVendorsParams
+}
+
+type ListVendorsResponseObject interface {
+	VisitListVendorsResponse(w http.ResponseWriter) error
+}
+
+type ListVendors200JSONResponse VendorMatches
+
+func (response ListVendors200JSONResponse) VisitListVendorsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListVendors400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response ListVendors400ApplicationProblemPlusJSONResponse) VisitListVendorsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListVendors401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListVendors401ApplicationProblemPlusJSONResponse) VisitListVendorsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetHealthzRequestObject struct {
 }
 
@@ -1811,6 +1964,9 @@ type StrictServerInterface interface {
 	// GetSettings The user's settings
 	// (GET /api/settings)
 	GetSettings(ctx context.Context, request GetSettingsRequestObject) (GetSettingsResponseObject, error)
+	// ListVendors The vendors the Vendor sheet offers
+	// (GET /api/vendors)
+	ListVendors(ctx context.Context, request ListVendorsRequestObject) (ListVendorsResponseObject, error)
 	// GetHealthz Liveness probe
 	// (GET /healthz)
 	GetHealthz(ctx context.Context, request GetHealthzRequestObject) (GetHealthzResponseObject, error)
@@ -2212,6 +2368,32 @@ func (sh *strictHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSettingsResponseObject); ok {
 		if err := validResponse.VisitGetSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListVendors operation middleware
+func (sh *strictHandler) ListVendors(w http.ResponseWriter, r *http.Request, params ListVendorsParams) {
+	var request ListVendorsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListVendors(ctx, request.(ListVendorsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListVendors")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListVendorsResponseObject); ok {
+		if err := validResponse.VisitListVendorsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

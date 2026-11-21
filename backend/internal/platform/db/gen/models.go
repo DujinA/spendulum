@@ -20,7 +20,7 @@ type Category struct {
 	CreatedAt time.Time
 	Archived  bool
 	Note      string
-	NameKey   pgtype.Text
+	NameKey   *string
 }
 
 type CategoryIdempotencyKey struct {
@@ -46,6 +46,7 @@ type Entry struct {
 	EntryDate  time.Time
 	Note       string
 	CreatedAt  time.Time
+	VendorID   *uuid.UUID
 }
 
 type ExchangeRate struct {
@@ -81,4 +82,13 @@ type User struct {
 	Email        string
 	PasswordHash string
 	CreatedAt    time.Time
+}
+
+type Vendor struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Name      string
+	Key       string
+	Archived  bool
+	CreatedAt time.Time
 }

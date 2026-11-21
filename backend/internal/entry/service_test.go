@@ -2,6 +2,8 @@ package entry_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -16,8 +18,13 @@ import (
 func march2() time.Time { return time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC) }
 
 func newService(repo *fakeRepo) *entry.Service {
+	return newServiceWithVendors(repo, &fakeVendors{})
+}
+
+func newServiceWithVendors(repo *fakeRepo, vendors *fakeVendors) *entry.Service {
 	return entry.NewService(entry.Deps{
 		Repo:     repo,
+		Vendors:  vendors,
 		Tx:       fakeTx{},
 		Settings: fakeSettings{settings.Settings{PrimaryCurrency: "RSD", TimeZone: "Europe/Belgrade"}},
 		Now:      func() time.Time { return time.Date(2026, 3, 2, 9, 30, 0, 0, time.UTC) },
@@ -82,6 +89,117 @@ func TestCreateRecordsThePrimaryCurrencyAndTheNoteTrimmed(t *testing.T) {
 	if got.Currency != "RSD" || got.Note != "weekly shop" || got.Amount != 178080 || !got.EntryDate.Equal(march2()) {
 		t.Errorf("entry = %+v, want 178080 RSD on 2026-03-02 with note %q", got, "weekly shop")
 	}
+}
+
+func TestCreateRecordsTheVendorTheVendorsServiceAnswersForTheName(t *testing.T) {
+	repo, vendors := newFakeRepo(), &fakeVendors{}
+	svc := newServiceWithVendors(repo, vendors)
+	n := entry.NewEntry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}
+
+	withVendor := n
+	withVendor.VendorName = "  Kafetrija "
+
+	got, err := svc.Create(t.Context(), uuid.Must(uuid.NewV7()), "k1", withVendor)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if len(vendors.used) != 1 || vendors.used[0] != "Kafetrija" || got.VendorID != vendors.ids["Kafetrija"] {
+		t.Errorf("used %q and recorded vendor %v, want Kafetrija's id %v", vendors.used, got.VendorID, vendors.ids["Kafetrija"])
+	}
+
+	none, err := svc.Create(t.Context(), uuid.Must(uuid.NewV7()), "k2", n)
+	if err != nil || none.VendorID != uuid.Nil || len(vendors.used) != 1 {
+		t.Errorf("Create without a vendor = %+v, %v after using %q; want no vendor and no use", none, err, vendors.used)
+	}
+}
+
+func TestCreateRefusesAVendorNameWithoutALetterOrDigit(t *testing.T) {
+	repo, vendors := newFakeRepo(), &fakeVendors{}
+
+	_, err := newServiceWithVendors(repo, vendors).Create(t.Context(), uuid.Must(uuid.NewV7()), "k", entry.NewEntry{
+		Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), VendorName: " -!- ",
+	})
+
+	if !errors.Is(err, entry.ErrVendorNameBlank) || len(vendors.used) != 0 || len(repo.entries) != 0 {
+		t.Errorf("Create = %v after using %q, want ErrVendorNameBlank and nothing stored", err, vendors.used)
+	}
+}
+
+func TestTheSameKeyWithAnotherVendorIsADifferentRequest(t *testing.T) {
+	svc := newService(newFakeRepo())
+	user := uuid.Must(uuid.NewV7())
+	n := entry.NewEntry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), VendorName: "Maxi"}
+
+	if _, err := svc.Create(t.Context(), user, "k", n); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	n.VendorName = "Lidl"
+	if _, err := svc.Create(t.Context(), user, "k", n); !errors.Is(err, entry.ErrKeyReused) {
+		t.Errorf("Create with another vendor = %v, want ErrKeyReused", err)
+	}
+}
+
+func TestTheSameKeyWithTheNoteEndMovedIntoTheVendorNameIsADifferentRequest(t *testing.T) {
+	svc := newService(newFakeRepo())
+	user := uuid.Must(uuid.NewV7())
+	n := entry.NewEntry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), Note: "Mini", VendorName: "Market"}
+
+	if _, err := svc.Create(t.Context(), user, "k", n); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	n.Note, n.VendorName = "", "MiniMarket"
+	if _, err := svc.Create(t.Context(), user, "k", n); !errors.Is(err, entry.ErrKeyReused) {
+		t.Errorf("Create with note %q and vendor %q = %v, want ErrKeyReused", n.Note, n.VendorName, err)
+	}
+}
+
+func TestAKeyStoredBeforeVendorsReplaysItsEntryForTheSameRequest(t *testing.T) {
+	repo := newFakeRepo()
+	n := entry.NewEntry{Kind: category.Expense, Amount: 178080, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), Note: "weekly groceries"}
+	stored := entry.Entry{ID: uuid.Must(uuid.NewV7()), Kind: n.Kind, Amount: n.Amount, Currency: "RSD", CategoryID: n.CategoryID, EntryDate: n.EntryDate}
+	repo.entries[stored.ID] = stored
+	repo.keys["k"] = fakeKey{hash: fingerprintBeforeVendors(n), entryID: stored.ID}
+
+	got, err := newService(repo).Create(t.Context(), uuid.Must(uuid.NewV7()), "k", n)
+
+	if err != nil || got.ID != stored.ID {
+		t.Errorf("Create = %+v, %v; want the entry %v stored under the key before vendors", got, err, stored.ID)
+	}
+}
+
+// fingerprintBeforeVendors is the request fingerprint as #29 wrote it, before entries had vendors.
+func fingerprintBeforeVendors(n entry.NewEntry) []byte {
+	h := sha256.New()
+	h.Write([]byte(n.Kind))
+	h.Write([]byte{0})
+	_ = binary.Write(h, binary.BigEndian, n.Amount)
+	h.Write(n.CategoryID[:])
+	h.Write([]byte(n.EntryDate.Format(time.DateOnly)))
+	h.Write([]byte{0})
+	h.Write([]byte(n.Note))
+
+	return h.Sum(nil)
+}
+
+type fakeVendors struct {
+	used []string
+	ids  map[string]uuid.UUID
+}
+
+func (f *fakeVendors) Use(_ context.Context, _ uuid.UUID, name string) (uuid.UUID, error) {
+	if f.ids == nil {
+		f.ids = map[string]uuid.UUID{}
+	}
+
+	f.used = append(f.used, name)
+	if _, ok := f.ids[name]; !ok {
+		f.ids[name] = uuid.Must(uuid.NewV7())
+	}
+
+	return f.ids[name], nil
 }
 
 type fakeRepo struct {

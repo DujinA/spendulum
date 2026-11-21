@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, usePrefetchQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { Check, Delete, Undo2 } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
@@ -15,14 +15,16 @@ import {
   type Kind,
   type NewEntry,
 } from "@/api/entries";
+import { vendorsQuery, vendorsQueryKey, type Vendor } from "@/api/vendors";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { VendorPicker } from "@/components/vendor-picker";
 import { addDays, dayLabel, todayIn } from "@/lib/dates";
 import { currencyLabel, findCurrency, formatTyped, isAmountKey, pressKey, toMinorUnits } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-type Sheet = "category" | "date" | "note";
+type Sheet = "vendor" | "category" | "date" | "note";
 
 const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "Backspace"] as const;
 
@@ -59,7 +61,10 @@ export function NewEntryScreen() {
   const [kind, setKind] = useState<Kind>("expense");
   const [typed, setTyped] = useState("");
   const [refund, setRefund] = useState(false);
+  const [vendor, setVendor] = useState<{ name: string; isNew: boolean }>();
   const [categoryId, setCategoryId] = useState<string>();
+  // A category the user picked is never replaced; one from the vendor's latest entry shows "last time".
+  const [categoryFrom, setCategoryFrom] = useState<"user" | "vendor">();
   const [entryDate, setEntryDate] = useState(today);
   const [note, setNote] = useState("");
   const [sheet, setSheet] = useState<Sheet>();
@@ -67,17 +72,28 @@ export function NewEntryScreen() {
   const focusedByTab = useRef(false);
 
   const currency = findCurrency(currencies, settings.primaryCurrency);
+  const vendorLabel = kind === "income" ? "Source" : "Vendor";
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
   const category = kindCategories.find((c) => c.id === categoryId);
   const draft: NewEntry | undefined =
     magnitude > 0 && category
-      ? { kind, amount: refund ? -magnitude : magnitude, categoryId: category.id, entryDate, note: note.trim() }
+      ? {
+          kind,
+          amount: refund ? -magnitude : magnitude,
+          categoryId: category.id,
+          entryDate,
+          note: note.trim(),
+          ...(vendor && { vendorName: vendor.name }),
+        }
       : undefined;
+
+  usePrefetchQuery(vendorsQuery(api, kind, ""));
 
   const save = useMutation({
     mutationFn: (body: NewEntry) => createEntry(api, idempotencyKey, body),
     onSuccess: async () => {
+      void queryClient.invalidateQueries({ queryKey: vendorsQueryKey });
       await queryClient.resetQueries({ queryKey: entriesQueryKey });
       await navigate({ to: "/entries", replace: true });
     },
@@ -91,7 +107,24 @@ export function NewEntryScreen() {
     if (next === kind) return;
     setKind(next);
     setCategoryId(undefined);
+    setCategoryFrom(undefined);
     setRefund(false);
+  }
+
+  function forgetPrefill() {
+    setCategoryFrom((from) => (from === "vendor" ? undefined : from));
+  }
+
+  function pickVendor(picked: Vendor) {
+    const { latest } = picked;
+    setVendor({ name: picked.name, isNew: false });
+    if (categoryFrom === "user") return;
+    if (latest && kindCategories.some((c) => c.id === latest.categoryId)) {
+      setCategoryId(latest.categoryId);
+      setCategoryFrom("vendor");
+    } else {
+      forgetPrefill();
+    }
   }
 
   function toggleRefund() {
@@ -174,15 +207,22 @@ export function NewEntryScreen() {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <Tile label="Category" value={category?.name} placeholder="Pick one" onClick={() => { setSheet("category"); }} />
-        <Tile label="Date" value={dayLabel(entryDate, today)} onClick={() => { setSheet("date"); }} />
         <Tile
-          label="Note"
-          value={note.trim() || undefined}
+          label={vendorLabel}
+          value={vendor?.name}
+          hint={vendor?.isNew ? "new" : undefined}
           placeholder="Optional"
-          className="col-span-2"
-          onClick={() => { setSheet("note"); }}
+          onClick={() => { setSheet("vendor"); }}
         />
+        <Tile
+          label="Category"
+          value={category?.name}
+          hint={category && categoryFrom === "vendor" ? "last time" : undefined}
+          placeholder="Pick one"
+          onClick={() => { setSheet("category"); }}
+        />
+        <Tile label="Date" value={dayLabel(entryDate, today)} onClick={() => { setSheet("date"); }} />
+        <Tile label="Note" value={note.trim() || undefined} placeholder="Optional" onClick={() => { setSheet("note"); }} />
       </div>
 
       {save.error && (
@@ -201,12 +241,36 @@ export function NewEntryScreen() {
         Save
       </Button>
 
+      <EntrySheet title={vendorLabel} open={sheet === "vendor"} onClose={() => { setSheet(undefined); }}>
+        <VendorPicker
+          kind={kind}
+          label={vendorLabel}
+          primaryCurrency={settings.primaryCurrency}
+          initialName={vendor?.name ?? ""}
+          open={sheet === "vendor"}
+          onPick={(picked) => {
+            pickVendor(picked);
+            setSheet(undefined);
+          }}
+          onCreate={(name) => {
+            setVendor({ name, isNew: true });
+            forgetPrefill();
+            setSheet(undefined);
+          }}
+          onLeaveEmpty={() => {
+            setVendor(undefined);
+            forgetPrefill();
+            setSheet(undefined);
+          }}
+        />
+      </EntrySheet>
       <EntrySheet title="Category" open={sheet === "category"} onClose={() => { setSheet(undefined); }}>
         <CategoryList
           categories={kindCategories}
           selected={category?.id}
           onPick={(id) => {
             setCategoryId(id);
+            setCategoryFrom("user");
             setSheet(undefined);
           }}
         />
@@ -279,23 +343,26 @@ function KindSwitch({ kind, onChange }: { kind: Kind; onChange: (kind: Kind) => 
 function Tile({
   label,
   value,
+  hint,
   placeholder,
-  className,
   onClick,
 }: {
   label: string;
   value: string | undefined;
+  hint?: string | undefined;
   placeholder?: string;
-  className?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn("bg-muted flex min-h-14 min-w-0 flex-col items-start justify-center rounded-xl px-3 py-2 text-left", className)}
+      className="bg-muted flex min-h-14 min-w-0 flex-col items-start justify-center rounded-xl px-3 py-2 text-left"
     >
-      <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</span>
+      <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        {label}
+        {hint && <span className="text-primary tracking-normal normal-case"> · {hint}</span>}
+      </span>
       <span className={cn("w-full truncate font-medium", !value && "text-muted-foreground font-normal")}>
         {value ?? placeholder}
       </span>

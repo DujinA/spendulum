@@ -1,0 +1,206 @@
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+
+import { useApi } from "@/api/context";
+import type { Kind } from "@/api/entries";
+import { vendorsQuery, type Vendor } from "@/api/vendors";
+import { Input } from "@/components/ui/input";
+import { currencyLabel } from "@/lib/money";
+
+function vendorNote(vendor: Vendor, primaryCurrency: string) {
+  const parts = [`${String(vendor.useCount)}×`];
+  if (vendor.archived) parts.unshift("Archived");
+  if (vendor.latest) {
+    parts.push(vendor.latest.categoryName);
+    if (vendor.latest.currency !== primaryCurrency) parts.push(currencyLabel(vendor.latest.currency));
+  }
+  return parts.join(" · ");
+}
+
+export function VendorPicker({
+  kind,
+  label,
+  primaryCurrency,
+  initialName,
+  open,
+  onPick,
+  onCreate,
+  onLeaveEmpty,
+}: {
+  kind: Kind;
+  label: string;
+  primaryCurrency: string;
+  initialName: string;
+  // The sheet stays mounted while it animates out, so closing it must drop a pending answer to Enter.
+  open: boolean;
+  onPick: (vendor: Vendor) => void;
+  onCreate: (name: string) => void;
+  onLeaveEmpty: () => void;
+}) {
+  const api = useApi();
+  const queryClient = useQueryClient();
+  const [typed, setTyped] = useState(initialName);
+  const name = typed.trim();
+  const { data, isFetching, isPlaceholderData } = useQuery({
+    ...vendorsQuery(api, kind, name),
+    placeholderData: keepPreviousData,
+  });
+  const didYouMeanId = useId();
+  // The first choice wins, so an answer to Enter that arrives after another choice or after closing is dropped.
+  const chosen = useRef(false);
+  useEffect(() => {
+    chosen.current = !open;
+    return () => {
+      chosen.current = true;
+    };
+  }, [open]);
+  function choose<A extends unknown[]>(choice: (...args: A) => void) {
+    return (...args: A) => {
+      if (chosen.current) return;
+      chosen.current = true;
+      choice(...args);
+    };
+  }
+  const pick = choose(onPick);
+  const create = choose(onCreate);
+  const leaveEmpty = choose(onLeaveEmpty);
+
+  const listed = data ? [...(data.match ? [data.match] : []), ...data.vendors] : [];
+  const nearMatches = data?.nearMatches ?? [];
+  const offersCreate = name !== "" && data !== undefined && !data.match;
+
+  return (
+    <div className="flex flex-col gap-2 pb-2">
+      <form
+        role="search"
+        className="px-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!name) return;
+          // The results on screen may still be for an earlier name, so ask for this one's answer.
+          queryClient.query({ ...vendorsQuery(api, kind, name), staleTime: "static" }).then(
+            (answer) => {
+              if (answer.match) pick(answer.match);
+              else create(name);
+            },
+            () => {
+              create(name);
+            },
+          );
+        }}
+      >
+        <Input
+          type="search"
+          aria-label="Search"
+          autoFocus
+          autoComplete="off"
+          enterKeyHint="done"
+          placeholder="Type a name"
+          className="h-11"
+          value={typed}
+          onFocus={(event) => {
+            event.currentTarget.select();
+          }}
+          onChange={(event) => {
+            setTyped(event.target.value);
+          }}
+        />
+      </form>
+
+      <section aria-label="Results" aria-busy={isFetching || isPlaceholderData}>
+        <button
+          type="button"
+          onClick={leaveEmpty}
+          className="text-muted-foreground flex h-12 w-full items-center border-b px-4 text-left"
+        >
+          Leave {label.toLowerCase()} empty
+        </button>
+
+        {listed.length > 0 && (
+          <ul aria-label={`${label}s`}>
+            {listed.map((vendor) => (
+              <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={pick} />
+            ))}
+          </ul>
+        )}
+
+        {offersCreate && nearMatches.length > 0 && (
+          <>
+            <p
+              id={didYouMeanId}
+              className="text-muted-foreground px-4 pt-3 pb-1 text-xs font-semibold tracking-wide uppercase"
+            >
+              Did you mean …?
+            </p>
+            <ul aria-labelledby={didYouMeanId}>
+              {nearMatches.map((vendor) => (
+                <VendorRow key={vendor.id} vendor={vendor} primaryCurrency={primaryCurrency} onPick={pick} />
+              ))}
+              <li>
+                <CreateButton
+                  onClick={() => {
+                    create(name);
+                  }}
+                >
+                  No, create «{name}»
+                </CreateButton>
+              </li>
+            </ul>
+          </>
+        )}
+
+        {offersCreate && nearMatches.length === 0 && (
+          <CreateButton
+            onClick={() => {
+              create(name);
+            }}
+          >
+            Create "{name}"
+          </CreateButton>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function VendorRow({
+  vendor,
+  primaryCurrency,
+  onPick,
+}: {
+  vendor: Vendor;
+  primaryCurrency: string;
+  onPick: (vendor: Vendor) => void;
+}) {
+  const noteId = useId();
+  return (
+    <li>
+      <button
+        type="button"
+        aria-label={vendor.name}
+        aria-describedby={noteId}
+        onClick={() => {
+          onPick(vendor);
+        }}
+        className="flex min-h-12 w-full items-center justify-between gap-3 border-b px-4 py-2 text-left"
+      >
+        <span className="min-w-0 truncate">{vendor.name}</span>
+        <span id={noteId} className="text-muted-foreground shrink-0 text-sm tabular-nums">
+          {vendorNote(vendor, primaryCurrency)}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function CreateButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-primary flex min-h-12 w-full items-center border-b px-4 py-2 text-left font-semibold"
+    >
+      <span className="min-w-0 break-words">{children}</span>
+    </button>
+  );
+}

@@ -25,6 +25,10 @@ type Repository interface {
 	EarliestEntryDate(ctx context.Context) (time.Time, bool, error)
 }
 
+type Vendors interface {
+	Use(ctx context.Context, userID uuid.UUID, name string) (uuid.UUID, error)
+}
+
 type Transactor interface {
 	InTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
@@ -35,6 +39,7 @@ type Settings interface {
 
 type Deps struct {
 	Repo     Repository
+	Vendors  Vendors
 	Tx       Transactor
 	Settings Settings
 	Now      func() time.Time
@@ -82,6 +87,15 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, key string, n Ne
 	err = s.d.Tx.InTx(ctx, func(ctx context.Context) error {
 		if err := s.d.Repo.DeleteExpiredKeys(ctx, userID, now.Add(-KeyLifetime)); err != nil {
 			return err //nolint:wrapcheck // wrapped below
+		}
+
+		if n.VendorName != "" {
+			vendorID, err := s.d.Vendors.Use(ctx, userID, n.VendorName)
+			if err != nil {
+				return err //nolint:wrapcheck // wrapped below
+			}
+
+			e.VendorID = vendorID
 		}
 
 		if err := s.d.Repo.Create(ctx, userID, e); err != nil {
