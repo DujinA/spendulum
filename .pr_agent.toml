@@ -1,2 +1,15 @@
+[config]
+# Default 32000 prunes most feature PRs.
+max_model_tokens = 128000
+
 [pr_code_suggestions]
 commitable_code_suggestions = true
+
+# pr-agent ignores linguist-generated, so list generated files here.
+[ignore]
+glob = [
+  'backend/internal/httpapi/gen/**',
+  'backend/internal/platform/db/gen/**',
+  'web/src/api/schema.gen.ts',
+  '**/pnpm-lock.yaml',
+]
