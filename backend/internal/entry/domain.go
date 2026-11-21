@@ -94,6 +94,7 @@ func (n NewEntry) fingerprint() []byte {
 
 	// Appended only when set, so a request without a vendor keeps the hash keys stored before vendors existed.
 	if n.VendorName != "" {
+		h.Write([]byte{0})
 		h.Write([]byte(n.VendorName))
 		h.Write([]byte{0})
 	}

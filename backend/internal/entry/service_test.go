@@ -141,6 +141,21 @@ func TestTheSameKeyWithAnotherVendorIsADifferentRequest(t *testing.T) {
 	}
 }
 
+func TestTheSameKeyWithTheNoteEndMovedIntoTheVendorNameIsADifferentRequest(t *testing.T) {
+	svc := newService(newFakeRepo())
+	user := uuid.Must(uuid.NewV7())
+	n := entry.NewEntry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), Note: "Mini", VendorName: "Market"}
+
+	if _, err := svc.Create(t.Context(), user, "k", n); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	n.Note, n.VendorName = "", "MiniMarket"
+	if _, err := svc.Create(t.Context(), user, "k", n); !errors.Is(err, entry.ErrKeyReused) {
+		t.Errorf("Create with note %q and vendor %q = %v, want ErrKeyReused", n.Note, n.VendorName, err)
+	}
+}
+
 func TestAKeyStoredBeforeVendorsReplaysItsEntryForTheSameRequest(t *testing.T) {
 	repo := newFakeRepo()
 	n := entry.NewEntry{Kind: category.Expense, Amount: 178080, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), Note: "weekly groceries"}
