@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
+import { toast } from "sonner";
 
 import { server } from "@/test/api";
 import { installIntersectionObserver } from "@/test/intersection";
@@ -16,6 +17,18 @@ const noAnimation = document.createElement("style");
 noAnimation.textContent = "[data-vaul-drawer], [data-vaul-overlay] { animation-name: none !important; }";
 document.head.append(noAnimation);
 
+// Nor matchMedia, which the toaster reads to follow the system theme.
+Object.defineProperty(window, "matchMedia", {
+  value: (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  }),
+});
+
 installIntersectionObserver();
 
 beforeAll(() => {
@@ -24,6 +37,8 @@ beforeAll(() => {
 
 afterEach(() => {
   cleanup();
+  // Toasts live in the toaster's module state, and a new toaster shows every toast still active.
+  toast.dismiss();
   server.resetHandlers();
 });
 

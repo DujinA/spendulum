@@ -5,6 +5,7 @@ import type { components } from "@/api/schema.gen";
 
 export type Entry = components["schemas"]["Entry"];
 export type NewEntry = components["schemas"]["NewEntry"];
+export type EntryChange = components["schemas"]["EntryChange"];
 export type Kind = components["schemas"]["Kind"];
 export type Category = components["schemas"]["Category"];
 
@@ -65,6 +66,35 @@ export async function createEntry(api: ApiClient, idempotencyKey: string, body: 
     params: { header: { "Idempotency-Key": idempotencyKey } },
     body,
   });
+  if (!data) throw apiError(response, error);
+  return data;
+}
+
+// Its own key root, so resetting the list never refetches an entry that is open while it is deleted.
+export function entryQuery(api: ApiClient, id: string) {
+  return queryOptions({
+    queryKey: ["entry", id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/entries/{id}", { params: { path: { id } } });
+      if (!data) throw apiError(response, error);
+      return data;
+    },
+  });
+}
+
+export async function updateEntry(api: ApiClient, id: string, body: EntryChange) {
+  const { data, error, response } = await api.PUT("/api/entries/{id}", { params: { path: { id } }, body });
+  if (!data) throw apiError(response, error);
+  return data;
+}
+
+export async function deleteEntry(api: ApiClient, id: string) {
+  const { error, response } = await api.DELETE("/api/entries/{id}", { params: { path: { id } } });
+  if (!response.ok) throw apiError(response, error);
+}
+
+export async function restoreEntry(api: ApiClient, id: string) {
+  const { data, error, response } = await api.POST("/api/entries/{id}/restore", { params: { path: { id } } });
   if (!data) throw apiError(response, error);
   return data;
 }

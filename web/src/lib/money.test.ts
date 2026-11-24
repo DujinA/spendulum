@@ -1,4 +1,4 @@
-import { findCurrency, formatMoney, formatTyped, pressKey, toMinorUnits } from "@/lib/money";
+import { findCurrency, formatMoney, formatTyped, parseAmount, pressKey, toMinorUnits, toTyped } from "@/lib/money";
 
 const rsd = { code: "RSD", minorUnits: 2 };
 const jpy = { code: "JPY", minorUnits: 0 };
@@ -68,5 +68,44 @@ describe("findCurrency", () => {
   it("takes the minor units from the currencies list, and 2 for a code the list lacks", () => {
     expect(findCurrency([rsd, jpy, kwd], "KWD")).toEqual(kwd);
     expect(findCurrency([rsd], "JPY")).toEqual({ code: "JPY", minorUnits: 2 });
+  });
+});
+
+describe("toTyped", () => {
+  it.each([
+    [178080, rsd, "1780.80"],
+    [-199000, rsd, "1990.00"],
+    [5, rsd, "0.05"],
+    [1780, jpy, "1780"],
+    [5, kwd, "0.005"],
+  ])("writes %i %o as %s", (amount, currency, want) => {
+    expect(toTyped(amount, currency)).toBe(want);
+  });
+});
+
+describe("parseAmount", () => {
+  it.each([
+    ["1780.80", rsd, 178080],
+    ["1780,8", rsd, 178080],
+    [" 1990 ", rsd, 199000],
+    ["1990.", rsd, 199000],
+    ["0", rsd, 0],
+    ["1780", jpy, 1780],
+    ["1.234", kwd, 1234],
+  ])("reads %j in %o as %i", (text, currency, want) => {
+    expect(parseAmount(text, currency)).toBe(want);
+  });
+
+  it.each([
+    ["", rsd],
+    ["12.345", rsd],
+    ["1.5", jpy],
+    ["-5", rsd],
+    ["1,780.80", rsd],
+    [".5", rsd],
+    ["1e3", rsd],
+    ["1234567890123", rsd],
+  ])("refuses %j in %o", (text, currency) => {
+    expect(parseAmount(text, currency)).toBeUndefined();
   });
 });

@@ -61,3 +61,19 @@ export function formatTyped(typed: string) {
   const grouped = groupThousands(whole || "0");
   return fraction === undefined ? grouped : `${grouped}.${fraction}`;
 }
+
+// Every minor digit, so the keypad and the edit form start from the stored amount: 178080 in RSD is "1780.80".
+export function toTyped(amount: number, currency: Currency) {
+  const units = currency.minorUnits;
+  const digits = String(Math.abs(amount)).padStart(units + 1, "0");
+  return units > 0 ? `${digits.slice(0, -units)}.${digits.slice(-units)}` : digits;
+}
+
+// Minor units of a typed amount, with "." or "," before at most the currency's minor digits; undefined when it is not one.
+export function parseAmount(text: string, currency: Currency) {
+  const match = /^(\d{1,12})(?:[.,](\d*))?$/.exec(text.trim());
+  if (!match) return undefined;
+  const [, whole = "", fraction = ""] = match;
+  if (fraction.length > currency.minorUnits) return undefined;
+  return Number(whole + fraction.padEnd(currency.minorUnits, "0"));
+}

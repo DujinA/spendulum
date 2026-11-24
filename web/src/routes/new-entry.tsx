@@ -1,7 +1,7 @@
 import { useMutation, usePrefetchQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Check, Delete, Undo2 } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { ApiError } from "@/api/client";
 import { useApi } from "@/api/context";
@@ -12,16 +12,28 @@ import {
   entriesQueryKey,
   settingsQuery,
   type Category,
+  type Entry,
   type Kind,
   type NewEntry,
 } from "@/api/entries";
 import { vendorsQuery, vendorsQueryKey, type Vendor } from "@/api/vendors";
+import { EntrySheet } from "@/components/entry-sheet";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { VendorPicker } from "@/components/vendor-picker";
 import { addDays, dayLabel, todayIn } from "@/lib/dates";
-import { currencyLabel, findCurrency, formatTyped, isAmountKey, pressKey, toMinorUnits } from "@/lib/money";
+import {
+  currencyLabel,
+  findCurrency,
+  formatMoney,
+  formatTyped,
+  isAmountKey,
+  pressKey,
+  toMinorUnits,
+  toTyped,
+} from "@/lib/money";
+import { useBackToEntries } from "@/lib/navigation";
+import { useUndoToasts } from "@/lib/undo-toasts";
 import { cn } from "@/lib/utils";
 
 type Sheet = "vendor" | "category" | "date" | "note";
@@ -46,32 +58,35 @@ function saveError(error: Error) {
   return "Could not save. Check your connection and try again.";
 }
 
-export function NewEntryScreen() {
+// Repeat copies an entry into a new one dated today; its category counts as the user's pick.
+export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
   const api = useApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const router = useRouter();
-  const canGoBack = useCanGoBack();
+  const backToEntries = useBackToEntries();
+  const undoToasts = useUndoToasts();
   const { data: settings } = useSuspenseQuery(settingsQuery(api));
   const { data: categories } = useSuspenseQuery(categoriesQuery(api));
   const { data: currencies } = useSuspenseQuery(currenciesQuery(api));
+  const currency = findCurrency(currencies, settings.primaryCurrency);
 
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [today] = useState(() => todayIn(settings.timeZone));
-  const [kind, setKind] = useState<Kind>("expense");
-  const [typed, setTyped] = useState("");
-  const [refund, setRefund] = useState(false);
-  const [vendor, setVendor] = useState<{ name: string; isNew: boolean }>();
-  const [categoryId, setCategoryId] = useState<string>();
+  const [kind, setKind] = useState<Kind>(repeat?.kind ?? "expense");
+  const [typed, setTyped] = useState(repeat ? toTyped(repeat.amount, currency) : "");
+  const [refund, setRefund] = useState(repeat ? repeat.amount < 0 : false);
+  const [vendor, setVendor] = useState<{ name: string; isNew: boolean } | undefined>(
+    repeat?.vendorName ? { name: repeat.vendorName, isNew: false } : undefined,
+  );
+  const [categoryId, setCategoryId] = useState<string | undefined>(repeat?.categoryId);
   // A category the user picked is never replaced; one from the vendor's latest entry shows "last time".
-  const [categoryFrom, setCategoryFrom] = useState<"user" | "vendor">();
+  const [categoryFrom, setCategoryFrom] = useState<"user" | "vendor" | undefined>(repeat && "user");
   const [entryDate, setEntryDate] = useState(today);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(repeat?.note ?? "");
   const [sheet, setSheet] = useState<Sheet>();
   // Only a control reached with Tab keeps its own Enter; after a tap or click, Enter saves.
   const focusedByTab = useRef(false);
 
-  const currency = findCurrency(currencies, settings.primaryCurrency);
   const vendorLabel = kind === "income" ? "Source" : "Vendor";
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
@@ -91,16 +106,33 @@ export function NewEntryScreen() {
   usePrefetchQuery(vendorsQuery(api, kind, ""));
 
   const save = useMutation({
-    mutationFn: (body: NewEntry) => createEntry(api, idempotencyKey, body),
-    onSuccess: async () => {
+    mutationFn: ({ body }: { body: NewEntry; another: boolean }) => createEntry(api, idempotencyKey, body),
+    onSuccess: async (entry, { another }) => {
+      undoToasts.saved(entry.id, `Saved ${formatMoney(entry.amount, findCurrency(currencies, entry.currency))}`);
       void queryClient.invalidateQueries({ queryKey: vendorsQueryKey });
+      if (another) {
+        startAnother();
+        await queryClient.resetQueries({ queryKey: entriesQueryKey });
+        return;
+      }
       await queryClient.resetQueries({ queryKey: entriesQueryKey });
       await navigate({ to: "/entries", replace: true });
     },
   });
 
-  function submit() {
-    if (draft && !save.isPending) save.mutate(draft);
+  function submit(another = false) {
+    if (draft && !save.isPending) save.mutate({ body: draft, another });
+  }
+
+  // The next entry keeps the kind and the date, and is a new request with its own key.
+  function startAnother() {
+    setIdempotencyKey(crypto.randomUUID());
+    setTyped("");
+    setRefund(false);
+    setVendor(undefined);
+    setCategoryId(undefined);
+    setCategoryFrom(undefined);
+    setNote("");
   }
 
   function switchKind(next: Kind) {
@@ -129,11 +161,6 @@ export function NewEntryScreen() {
 
   function toggleRefund() {
     if (kind === "expense") setRefund((on) => !on);
-  }
-
-  function cancel() {
-    if (canGoBack) router.history.back();
-    else void navigate({ to: "/entries" });
   }
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -168,7 +195,7 @@ export function NewEntryScreen() {
     <section className="flex min-h-0 flex-1 flex-col gap-3 md:mx-auto md:w-full md:max-w-sm md:flex-none">
       <h1 className="sr-only">Add entry</h1>
       <header className="grid grid-cols-[1fr_auto_1fr] items-center">
-        <Button variant="ghost" className="text-primary h-11 justify-self-start px-2" onClick={cancel}>
+        <Button variant="ghost" className="text-primary h-11 justify-self-start px-2" onClick={backToEntries}>
           Cancel
         </Button>
         <KindSwitch kind={kind} onChange={switchKind} />
@@ -237,9 +264,27 @@ export function NewEntryScreen() {
         }}
       />
 
-      <Button className="h-12 text-base" disabled={!draft || save.isPending} onClick={submit}>
-        Save
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="outline"
+          className="h-12 text-base"
+          disabled={!draft || save.isPending}
+          onClick={() => {
+            submit(true);
+          }}
+        >
+          Save + another
+        </Button>
+        <Button
+          className="h-12 text-base"
+          disabled={!draft || save.isPending}
+          onClick={() => {
+            submit();
+          }}
+        >
+          Save
+        </Button>
+      </div>
 
       <EntrySheet title={vendorLabel} open={sheet === "vendor"} onClose={() => { setSheet(undefined); }}>
         <VendorPicker
@@ -392,37 +437,6 @@ function Keypad({ onKey }: { onKey: (key: string) => void }) {
         </button>
       ))}
     </div>
-  );
-}
-
-function EntrySheet({
-  title,
-  open,
-  onClose,
-  children,
-}: {
-  title: string;
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Drawer
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-    >
-      <DrawerContent aria-describedby={undefined} className="pb-[env(safe-area-inset-bottom)] md:mx-auto md:max-w-md">
-        <div className="flex items-center justify-between px-4 pt-2 pb-1">
-          <DrawerTitle className="text-base">{title}</DrawerTitle>
-          <Button variant="ghost" className="text-primary h-11 px-2" onClick={onClose}>
-            Done
-          </Button>
-        </div>
-        <div className="overflow-y-auto pb-2">{children}</div>
-      </DrawerContent>
-    </Drawer>
   );
 }
 
