@@ -38,7 +38,12 @@ export function AppShell() {
       </main>
       {!fullScreen && <TabBar />}
       {/* At the top, so a toast never covers the tab bar or the keypad. */}
-      <Toaster position="top-center" offset={toastOffset} mobileOffset={toastOffset} />
+      <Toaster
+        position="top-center"
+        offset={toastOffset}
+        mobileOffset={toastOffset}
+        toastOptions={{ classNames: { title: "text-sm", actionButton: "h-11! px-4! text-sm!" } }}
+      />
     </div>
   );
 }
