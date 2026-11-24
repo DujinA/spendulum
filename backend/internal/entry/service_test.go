@@ -184,6 +184,139 @@ func fingerprintBeforeVendors(n entry.NewEntry) []byte {
 	return h.Sum(nil)
 }
 
+func TestUpdateChecksTheRulesAgainstTheEntrysOwnKind(t *testing.T) {
+	for name, tc := range map[string]struct {
+		kind   category.Kind
+		change entry.Change
+		want   error
+	}{
+		"refund":           {category.Expense, entry.Change{Amount: -1990, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}, nil},
+		"income":           {category.Income, entry.Change{Amount: 1, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}, nil},
+		"zero expense":     {category.Expense, entry.Change{Amount: 0, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}, entry.ErrExpenseZero},
+		"negative income":  {category.Income, entry.Change{Amount: -500, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}, entry.ErrIncomeNotPositive},
+		"missing category": {category.Expense, entry.Change{Amount: 100, EntryDate: march2()}, entry.ErrCategoryRequired},
+		"missing date":     {category.Expense, entry.Change{Amount: 100, CategoryID: uuid.Must(uuid.NewV7())}, entry.ErrEntryDateRequired},
+		"blank vendor":     {category.Expense, entry.Change{Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), VendorName: "?!"}, entry.ErrVendorNameBlank},
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := newFakeRepo()
+			stored := repo.add(entry.Entry{Kind: tc.kind, Amount: 700, Currency: "EUR", CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()})
+
+			got, err := newService(repo).Update(t.Context(), uuid.Must(uuid.NewV7()), stored.ID, tc.change)
+
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("Update = %v, want %v", err, tc.want)
+			}
+
+			if tc.want != nil {
+				if repo.entries[stored.ID].Amount != 700 {
+					t.Errorf("a refused change was stored: %+v", repo.entries[stored.ID])
+				}
+
+				return
+			}
+
+			if got.Amount != tc.change.Amount || got.Kind != tc.kind || got.Currency != "EUR" {
+				t.Errorf("Update = %+v, want amount %d on the same %s in EUR", got, tc.change.Amount, tc.kind)
+			}
+		})
+	}
+}
+
+func TestUpdateRecordsTheVendorTheVendorsServiceAnswersAndTheNoteTrimmed(t *testing.T) {
+	repo, vendors := newFakeRepo(), &fakeVendors{}
+	svc := newServiceWithVendors(repo, vendors)
+	stored := repo.add(entry.Entry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()})
+	change := entry.Change{Amount: 250, CategoryID: stored.CategoryID, EntryDate: march2(), VendorName: " Maxi ", Note: "  fruit \n"}
+
+	got, err := svc.Update(t.Context(), uuid.Must(uuid.NewV7()), stored.ID, change)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if len(vendors.used) != 1 || vendors.used[0] != "Maxi" || got.VendorID != vendors.ids["Maxi"] || got.Note != "fruit" {
+		t.Errorf("Update = %+v after using %q, want Maxi's id %v and note %q", got, vendors.used, vendors.ids["Maxi"], "fruit")
+	}
+
+	change.VendorName = "  "
+	if got, err := svc.Update(t.Context(), uuid.Must(uuid.NewV7()), stored.ID, change); err != nil || got.VendorID != uuid.Nil || len(vendors.used) != 1 {
+		t.Errorf("Update with a blank vendor = %+v, %v after using %q; want no vendor and no use", got, err, vendors.used)
+	}
+}
+
+func TestUpdateKeepsTheEntrysOwnVendorWithoutUsingItAgain(t *testing.T) {
+	repo, vendors := newFakeRepo(), &fakeVendors{}
+	maxi := uuid.Must(uuid.NewV7())
+	stored := repo.add(entry.Entry{
+		Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), VendorID: maxi, VendorName: "Maxi",
+	})
+
+	got, err := newServiceWithVendors(repo, vendors).Update(t.Context(), uuid.Must(uuid.NewV7()), stored.ID, entry.Change{
+		Amount: 100, CategoryID: stored.CategoryID, EntryDate: march2(), VendorName: "Maxi", Note: "only the note changed",
+	})
+
+	if err != nil || got.VendorID != maxi || len(vendors.used) != 0 {
+		t.Errorf("Update = %+v, %v after using %q; want vendor %v kept and not used, so an archived one stays archived", got, err, vendors.used, maxi)
+	}
+}
+
+func TestUpdateOfAnEntryThatIsNotThereIsNotFound(t *testing.T) {
+	_, err := newService(newFakeRepo()).Update(t.Context(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), entry.Change{
+		Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(),
+	})
+
+	if !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("Update = %v, want ErrNotFound", err)
+	}
+}
+
+func TestDeleteHidesTheEntryAndRestoreAnswersItWithTheSameID(t *testing.T) {
+	repo := newFakeRepo()
+	svc := newService(repo)
+	user := uuid.Must(uuid.NewV7())
+	stored := repo.add(entry.Entry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()})
+
+	if err := svc.Delete(t.Context(), user, stored.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if _, err := svc.Get(t.Context(), user, stored.ID); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("Get after Delete = %v, want ErrNotFound", err)
+	}
+
+	if want := time.Date(2026, 3, 2, 9, 30, 0, 0, time.UTC); !repo.deletedAt[stored.ID].Equal(want) {
+		t.Errorf("deleted at %s, want %s", repo.deletedAt[stored.ID], want)
+	}
+
+	got, err := svc.Restore(t.Context(), user, stored.ID)
+	if err != nil || got.ID != stored.ID {
+		t.Errorf("Restore = %+v, %v; want the entry %v", got, err, stored.ID)
+	}
+
+	if err := svc.Delete(t.Context(), user, uuid.Must(uuid.NewV7())); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("Delete of an entry that is not there = %v, want ErrNotFound", err)
+	}
+}
+
+func TestARetryAfterItsEntryWasDeletedIsRefused(t *testing.T) {
+	svc := newService(newFakeRepo())
+	user := uuid.Must(uuid.NewV7())
+	n := entry.NewEntry{Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2()}
+
+	created, err := svc.Create(t.Context(), user, "k", n)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := svc.Delete(t.Context(), user, created.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if _, err := svc.Create(t.Context(), user, "k", n); !errors.Is(err, entry.ErrKeyEntryDeleted) {
+		t.Errorf("retry = %v, want ErrKeyEntryDeleted", err)
+	}
+}
+
 type fakeVendors struct {
 	used []string
 	ids  map[string]uuid.UUID
@@ -203,8 +336,9 @@ func (f *fakeVendors) Use(_ context.Context, _ uuid.UUID, name string) (uuid.UUI
 }
 
 type fakeRepo struct {
-	entries map[uuid.UUID]entry.Entry
-	keys    map[string]fakeKey
+	entries   map[uuid.UUID]entry.Entry
+	deletedAt map[uuid.UUID]time.Time
+	keys      map[string]fakeKey
 }
 
 type fakeKey struct {
@@ -213,7 +347,14 @@ type fakeKey struct {
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{entries: map[uuid.UUID]entry.Entry{}, keys: map[string]fakeKey{}}
+	return &fakeRepo{entries: map[uuid.UUID]entry.Entry{}, deletedAt: map[uuid.UUID]time.Time{}, keys: map[string]fakeKey{}}
+}
+
+func (f *fakeRepo) add(e entry.Entry) entry.Entry {
+	e.ID = uuid.Must(uuid.NewV7())
+	f.entries[e.ID] = e
+
+	return e
 }
 
 func (f *fakeRepo) DeleteExpiredKeys(context.Context, uuid.UUID, time.Time) error { return nil }
@@ -242,11 +383,45 @@ func (f *fakeRepo) Key(_ context.Context, _ uuid.UUID, key string) ([]byte, uuid
 
 func (f *fakeRepo) Get(_ context.Context, _ uuid.UUID, id uuid.UUID) (entry.Entry, error) {
 	e, ok := f.entries[id]
-	if !ok {
+	if _, deleted := f.deletedAt[id]; !ok || deleted {
 		return entry.Entry{}, entry.ErrNotFound
 	}
 
 	return e, nil
+}
+
+func (f *fakeRepo) Update(ctx context.Context, userID uuid.UUID, e entry.Entry) error {
+	current, err := f.Get(ctx, userID, e.ID)
+	if err != nil {
+		return err
+	}
+
+	current.Amount, current.CategoryID, current.VendorID, current.EntryDate, current.Note = e.Amount, e.CategoryID, e.VendorID, e.EntryDate, e.Note
+	f.entries[e.ID] = current
+
+	return nil
+}
+
+func (f *fakeRepo) Delete(_ context.Context, _ uuid.UUID, id uuid.UUID, at time.Time) error {
+	if _, ok := f.entries[id]; !ok {
+		return entry.ErrNotFound
+	}
+
+	if _, deleted := f.deletedAt[id]; !deleted {
+		f.deletedAt[id] = at
+	}
+
+	return nil
+}
+
+func (f *fakeRepo) Restore(_ context.Context, _ uuid.UUID, id uuid.UUID) error {
+	if _, ok := f.entries[id]; !ok {
+		return entry.ErrNotFound
+	}
+
+	delete(f.deletedAt, id)
+
+	return nil
 }
 
 func (f *fakeRepo) EarliestEntryDate(context.Context) (time.Time, bool, error) {

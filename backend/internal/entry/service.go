@@ -16,6 +16,11 @@ type Repository interface {
 	DeleteExpiredKeys(ctx context.Context, userID uuid.UUID, createdBefore time.Time) error
 	// Create answers ErrUnknownCategory when the user has no category with that id and kind.
 	Create(ctx context.Context, userID uuid.UUID, e Entry) error
+	// Update stores e's amount, category, vendor, entry date and note; ErrNotFound when the entry is deleted.
+	Update(ctx context.Context, userID uuid.UUID, e Entry) error
+	// Delete keeps the time of the first delete; deleting a deleted entry is no error.
+	Delete(ctx context.Context, userID, id uuid.UUID, at time.Time) error
+	Restore(ctx context.Context, userID, id uuid.UUID) error
 	// ClaimKey answers false when the user already holds the key.
 	ClaimKey(ctx context.Context, userID uuid.UUID, key string, requestHash []byte, entryID uuid.UUID, at time.Time) (bool, error)
 	Key(ctx context.Context, userID uuid.UUID, key string) (requestHash []byte, entryID uuid.UUID, err error)
@@ -134,7 +139,63 @@ func (s *Service) replay(ctx context.Context, userID uuid.UUID, key string, hash
 		return Entry{}, ErrKeyReused
 	}
 
-	return s.Get(ctx, userID, entryID)
+	e, err := s.Get(ctx, userID, entryID)
+	if errors.Is(err, ErrNotFound) {
+		return Entry{}, ErrKeyEntryDeleted
+	}
+
+	return e, err
+}
+
+// Update edits the entry in place: its kind, currency and creation time stay as recorded.
+func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, c Change) (Entry, error) {
+	err := s.d.Tx.InTx(ctx, func(ctx context.Context) error {
+		e, err := s.d.Repo.Get(ctx, userID, id)
+		if err != nil {
+			return err //nolint:wrapcheck // wrapped below
+		}
+
+		c, err := c.normalized(e.Kind)
+		if err != nil {
+			return err
+		}
+
+		e.Amount, e.CategoryID, e.EntryDate, e.Note = c.Amount, c.CategoryID, c.EntryDate, c.Note
+
+		// The entry's own vendor is kept as it is, so an edit of other fields never unarchives it.
+		switch {
+		case c.VendorName == "":
+			e.VendorID = uuid.Nil
+		case c.VendorName != e.VendorName:
+			if e.VendorID, err = s.d.Vendors.Use(ctx, userID, c.VendorName); err != nil {
+				return err //nolint:wrapcheck // wrapped below
+			}
+		}
+
+		return s.d.Repo.Update(ctx, userID, e)
+	})
+	if err != nil {
+		return Entry{}, fmt.Errorf("entry: update: %w", err)
+	}
+
+	return s.Get(ctx, userID, id)
+}
+
+// Delete hides the entry from every list and report until Restore; deleted entries are never purged.
+func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
+	if err := s.d.Repo.Delete(ctx, userID, id, s.d.Now()); err != nil {
+		return fmt.Errorf("entry: delete: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) Restore(ctx context.Context, userID, id uuid.UUID) (Entry, error) {
+	if err := s.d.Repo.Restore(ctx, userID, id); err != nil {
+		return Entry{}, fmt.Errorf("entry: restore: %w", err)
+	}
+
+	return s.Get(ctx, userID, id)
 }
 
 func (s *Service) Get(ctx context.Context, userID, id uuid.UUID) (Entry, error) {

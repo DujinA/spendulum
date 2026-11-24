@@ -52,6 +52,7 @@ type Settings = components["schemas"]["Settings"];
 type Category = components["schemas"]["Category"];
 type Entry = components["schemas"]["Entry"];
 type NewEntry = components["schemas"]["NewEntry"];
+type EntryChange = components["schemas"]["EntryChange"];
 type EntryPage = components["schemas"]["EntryPage"];
 type Kind = components["schemas"]["Kind"];
 type Vendor = components["schemas"]["Vendor"];
@@ -100,6 +101,12 @@ export interface CreateRequest {
   body: NewEntry;
 }
 
+export interface UpdateRequest {
+  id: string;
+  idempotencyKey: string | null;
+  body: EntryChange;
+}
+
 let nextId = 1;
 
 export function fakeEntry(fields: Partial<Entry> & Pick<Entry, "entryDate">): Entry {
@@ -117,7 +124,7 @@ export function fakeEntry(fields: Partial<Entry> & Pick<Entry, "entryDate">): En
   };
 }
 
-// A fake entries API: lists newest entry date first in pages, and records each create request.
+// A fake entries API: lists newest entry date first in pages, records each create, edit, delete and restore, and hides deleted entries.
 export function fakeEntriesApi({
   settings = { primaryCurrency: "RSD", timeZone: "Europe/Belgrade" },
   categories = [groceries, eatingOut, otherExpense, salary, otherIncome],
@@ -129,6 +136,10 @@ export function fakeEntriesApi({
   const state = {
     entries: [...entries],
     creates: [] as CreateRequest[],
+    updates: [] as UpdateRequest[],
+    deletes: [] as string[],
+    restores: [] as string[],
+    deleted: new Set<string>(),
     vendorSearches: [] as { kind: string | null; name: string | null }[],
     // Holds every vendor search response until the returned function is called.
     holdVendorSearches() {
@@ -141,9 +152,22 @@ export function fakeEntriesApi({
         release();
       };
     },
+    // Holds every restore response until the returned function is called.
+    holdRestores() {
+      let release: () => void = () => undefined;
+      restoresHeld = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        restoresHeld = undefined;
+        release();
+      };
+    },
     listRequests: 0,
     failLists: 0,
     failCreates: 0,
+    failDeletes: 0,
+    failRestores: 0,
     // Holds every list response until the returned function is called.
     holdLists() {
       let release: () => void = () => undefined;
@@ -158,10 +182,28 @@ export function fakeEntriesApi({
   };
   let held: Promise<void> | undefined;
   let vendorsHeld: Promise<void> | undefined;
+  let restoresHeld: Promise<void> | undefined;
   const byKey = new Map<string, Entry>();
 
+  const live = (id: string) => state.entries.find((e) => e.id === id && !state.deleted.has(id));
+  const vendorNamed = (name: string) =>
+    Object.values(vendors)
+      .flat()
+      .find((v) => nameKey(v.name) === nameKey(name)) ?? fakeVendor({ name });
+  const setVendor = (entry: Entry, name: string | undefined) => {
+    delete entry.vendorId;
+    delete entry.vendorName;
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+    const vendor = vendorNamed(trimmed);
+    entry.vendorId = vendor.id;
+    entry.vendorName = vendor.name;
+  };
+
   const sorted = () =>
-    [...state.entries].sort(
+    state.entries
+      .filter((e) => !state.deleted.has(e.id))
+      .sort(
       (a, b) => b.entryDate.localeCompare(a.entryDate) || b.createdAt.localeCompare(a.createdAt),
     );
 
@@ -223,18 +265,53 @@ export function fakeEntriesApi({
         note: body.note?.trim() ?? "",
         createdAt: new Date().toISOString(),
       });
-      const vendorName = body.vendorName?.trim();
-      if (vendorName) {
-        const known = Object.values(vendors)
-          .flat()
-          .find((v) => nameKey(v.name) === nameKey(vendorName));
-        const vendor = known ?? fakeVendor({ name: vendorName });
-        entry.vendorId = vendor.id;
-        entry.vendorName = vendor.name;
-      }
+      setVendor(entry, body.vendorName);
       state.entries.push(entry);
       if (idempotencyKey !== null) byKey.set(idempotencyKey, entry);
       return HttpResponse.json<Entry>(entry, { status: 201 });
+    }),
+    http.get<{ id: string }>("*/api/entries/:id", ({ params }) => {
+      const entry = live(params.id);
+      return entry ? HttpResponse.json<Entry>(entry) : problem(404, "Not Found", "");
+    }),
+    http.put<{ id: string }, EntryChange>("*/api/entries/:id", async ({ request, params }) => {
+      const body = await request.json();
+      state.updates.push({ id: params.id, idempotencyKey: request.headers.get("Idempotency-Key"), body });
+      const entry = live(params.id);
+      if (!entry) return problem(404, "Not Found", "");
+      const category = categories.find((c) => c.id === body.categoryId && c.kind === entry.kind);
+      if (!category) return problem(422, "Unprocessable Content", "The category does not exist or is of the other kind.");
+      Object.assign(entry, {
+        amount: body.amount,
+        categoryId: category.id,
+        categoryName: category.name,
+        entryDate: body.entryDate,
+        note: body.note?.trim() ?? "",
+      });
+      setVendor(entry, body.vendorName);
+      return HttpResponse.json<Entry>(entry);
+    }),
+    http.delete<{ id: string }>("*/api/entries/:id", ({ params }) => {
+      state.deletes.push(params.id);
+      if (state.failDeletes > 0) {
+        state.failDeletes--;
+        return problem(503, "Service Unavailable", "");
+      }
+      if (!state.entries.some((e) => e.id === params.id)) return problem(404, "Not Found", "");
+      state.deleted.add(params.id);
+      return new HttpResponse(null, { status: 204 });
+    }),
+    http.post<{ id: string }>("*/api/entries/:id/restore", async ({ params }) => {
+      state.restores.push(params.id);
+      await restoresHeld;
+      if (state.failRestores > 0) {
+        state.failRestores--;
+        return problem(503, "Service Unavailable", "");
+      }
+      const entry = state.entries.find((e) => e.id === params.id);
+      if (!entry) return problem(404, "Not Found", "");
+      state.deleted.delete(params.id);
+      return HttpResponse.json<Entry>(entry);
     }),
   );
 

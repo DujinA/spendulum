@@ -17,8 +17,9 @@ function rows(day: HTMLElement) {
   return within(day).getAllByRole("listitem");
 }
 
+// The toaster is a region too, outside main.
 async function days() {
-  return screen.findAllByRole("region");
+  return within(await screen.findByRole("main")).findAllByRole("region");
 }
 
 describe("entry list", () => {

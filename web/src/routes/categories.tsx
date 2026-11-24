@@ -34,6 +34,7 @@ import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { newIdempotencyKey } from "@/lib/idempotency";
 
 const kinds: { kind: Kind; label: string }[] = [
   { kind: "expense", label: "Expense" },
@@ -413,7 +414,7 @@ function useInvalidateCategories() {
 function AddCategory({ kind, onDone }: { kind: Kind; onDone: () => void }) {
   const api = useApi();
   const invalidate = useInvalidateCategories();
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(() => newIdempotencyKey());
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
 

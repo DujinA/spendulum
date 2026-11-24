@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { Ellipsis, LayoutDashboard, List, Plus, type LucideIcon } from "lucide-react";
 
+import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -15,6 +16,8 @@ const navItems: NavItem[] = [
   { to: "/new", label: "Add entry", icon: Plus },
   { to: "/more", label: "More", icon: Ellipsis },
 ];
+
+const toastOffset = { top: "max(1rem, env(safe-area-inset-top))" };
 
 // The keypad screen fills a phone screen with its own Cancel and Save, so it has no tab bar there.
 export function AppShell() {
@@ -34,6 +37,13 @@ export function AppShell() {
         <Outlet />
       </main>
       {!fullScreen && <TabBar />}
+      {/* At the top, so a toast never covers the tab bar or the keypad. */}
+      <Toaster
+        position="top-center"
+        offset={toastOffset}
+        mobileOffset={toastOffset}
+        toastOptions={{ classNames: { title: "text-sm", actionButton: "h-11! px-4! text-sm!" } }}
+      />
     </div>
   );
 }

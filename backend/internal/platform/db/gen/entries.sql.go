@@ -74,6 +74,24 @@ func (q *Queries) CreateIdempotencyKey(ctx context.Context, arg CreateIdempotenc
 	return result.RowsAffected(), nil
 }
 
+const deleteEntry = `-- name: DeleteEntry :execrows
+UPDATE entries SET deleted_at = coalesce(deleted_at, $1::timestamptz) WHERE user_id = $2 AND id = $3
+`
+
+type DeleteEntryParams struct {
+	DeletedAt time.Time
+	UserID    uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) DeleteEntry(ctx context.Context, arg DeleteEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEntry, arg.DeletedAt, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredIdempotencyKeys = `-- name: DeleteExpiredIdempotencyKeys :exec
 DELETE FROM idempotency_keys WHERE user_id = $1 AND created_at <= $2
 `
@@ -106,7 +124,7 @@ SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_nam
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
 LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
-WHERE e.user_id = $1
+WHERE e.user_id = $1 AND e.deleted_at IS NULL
 ORDER BY e.entry_date DESC, e.created_at DESC, e.id DESC
 LIMIT $2
 `
@@ -168,7 +186,7 @@ SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_nam
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
 LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
-WHERE e.user_id = $1
+WHERE e.user_id = $1 AND e.deleted_at IS NULL
     AND (e.entry_date, e.created_at, e.id) < ($2::date, $3::timestamptz, $4::uuid)
 ORDER BY e.entry_date DESC, e.created_at DESC, e.id DESC
 LIMIT $5
@@ -240,7 +258,7 @@ SELECT e.id, e.kind, e.amount, e.currency, e.category_id, c.name AS category_nam
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
 LEFT JOIN vendors v ON v.user_id = e.user_id AND v.id = e.vendor_id
-WHERE e.user_id = $1 AND e.id = $2
+WHERE e.user_id = $1 AND e.id = $2 AND e.deleted_at IS NULL
 `
 
 type EntryParams struct {
@@ -300,4 +318,53 @@ func (q *Queries) IdempotencyKey(ctx context.Context, arg IdempotencyKeyParams) 
 	var i IdempotencyKeyRow
 	err := row.Scan(&i.RequestHash, &i.EntryID)
 	return i, err
+}
+
+const restoreEntry = `-- name: RestoreEntry :execrows
+UPDATE entries SET deleted_at = NULL WHERE user_id = $1 AND id = $2
+`
+
+type RestoreEntryParams struct {
+	UserID uuid.UUID
+	ID     uuid.UUID
+}
+
+func (q *Queries) RestoreEntry(ctx context.Context, arg RestoreEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreEntry, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateEntry = `-- name: UpdateEntry :execrows
+UPDATE entries
+SET amount = $1, category_id = $2, vendor_id = $3, entry_date = $4, note = $5
+WHERE user_id = $6 AND id = $7 AND deleted_at IS NULL
+`
+
+type UpdateEntryParams struct {
+	Amount     int64
+	CategoryID uuid.UUID
+	VendorID   *uuid.UUID
+	EntryDate  time.Time
+	Note       string
+	UserID     uuid.UUID
+	ID         uuid.UUID
+}
+
+func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateEntry,
+		arg.Amount,
+		arg.CategoryID,
+		arg.VendorID,
+		arg.EntryDate,
+		arg.Note,
+		arg.UserID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

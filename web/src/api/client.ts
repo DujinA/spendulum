@@ -36,3 +36,11 @@ export function apiError(response: Response, error: { detail?: string } | undefi
   const retryAfter = Number(response.headers.get("Retry-After"));
   return new ApiError(response.status, error?.detail, retryAfter > 0 ? retryAfter : undefined);
 }
+
+export const deleteFailed = "Could not delete. Check your connection and try again.";
+
+// A refused request says why; anything else is most likely the connection.
+export function saveError(error: Error) {
+  if (error instanceof ApiError && error.status === 422) return error.message;
+  return "Could not save. Check your connection and try again.";
+}

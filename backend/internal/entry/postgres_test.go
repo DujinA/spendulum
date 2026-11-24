@@ -282,6 +282,144 @@ func TestIdempotencyKeysAreScopedByUserAndFreedWhenExpired(t *testing.T) {
 	}
 }
 
+func TestUpdateReplacesAmountCategoryVendorDateAndNoteButKeepsKindAndCurrency(t *testing.T) {
+	f := newFixture(t)
+	user := dbtest.NewUser(t, f.d.Queries())
+	groceries := f.category(t, user, category.Expense, "Groceries")
+	eatingOut := f.category(t, user, category.Expense, "Eating out")
+	maxi := f.vendor(t, user, "Maxi")
+	created := f.entry(t, user, groceries, "2026-03-02", time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC))
+
+	change := created
+	change.Amount, change.CategoryID, change.VendorID, change.EntryDate, change.Note = -2500, eatingOut, maxi, day(t, "2026-02-27"), "returned"
+	change.Kind, change.Currency = category.Income, "EUR"
+
+	if err := f.repo.Update(t.Context(), user, change); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := f.repo.Get(t.Context(), user, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if got.Amount != -2500 || got.CategoryID != eatingOut || got.CategoryName != "Eating out" || got.VendorID != maxi ||
+		!got.EntryDate.Equal(day(t, "2026-02-27")) || got.Note != "returned" ||
+		got.Kind != category.Expense || got.Currency != "RSD" || !got.CreatedAt.Equal(created.CreatedAt) {
+		t.Errorf("Get after Update = %+v, want the change on an RSD expense", got)
+	}
+
+	change.VendorID = uuid.Nil
+	if err := f.repo.Update(t.Context(), user, change); err != nil {
+		t.Fatalf("Update without a vendor: %v", err)
+	}
+
+	if got, _ := f.repo.Get(t.Context(), user, created.ID); got.VendorID != uuid.Nil {
+		t.Errorf("vendor after an Update without one = %v, want none", got.VendorID)
+	}
+}
+
+func TestUpdateToACategoryOfTheOtherKindIsAnUnknownCategory(t *testing.T) {
+	f := newFixture(t)
+	user := dbtest.NewUser(t, f.d.Queries())
+	e := f.entry(t, user, f.category(t, user, category.Expense, "Groceries"), "2026-03-02", time.Now())
+
+	e.CategoryID = f.category(t, user, category.Income, "Salary")
+	if err := f.repo.Update(t.Context(), user, e); !errors.Is(err, entry.ErrUnknownCategory) {
+		t.Errorf("Update = %v, want ErrUnknownCategory", err)
+	}
+}
+
+func TestADeletedEntryLeavesEveryReadUntilRestoredWithTheSameID(t *testing.T) {
+	f := newFixture(t)
+	user := dbtest.NewUser(t, f.d.Queries())
+	cat := f.category(t, user, category.Expense, "Groceries")
+	kept := f.entry(t, user, cat, "2026-03-01", time.Now())
+	deleted := f.entry(t, user, cat, "2026-03-02", time.Now())
+	at := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+
+	if err := f.repo.Delete(t.Context(), user, deleted.ID, at); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if err := f.repo.Delete(t.Context(), user, deleted.ID, at.Add(time.Minute)); err != nil {
+		t.Errorf("Delete of a deleted entry = %v, want nil", err)
+	}
+
+	if _, err := f.repo.Get(t.Context(), user, deleted.ID); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("Get of a deleted entry = %v, want ErrNotFound", err)
+	}
+
+	all, err := f.repo.List(t.Context(), user, nil, 10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	assertIDs(t, all, []uuid.UUID{kept.ID})
+
+	after, err := f.repo.List(t.Context(), user, &entry.Cursor{EntryDate: day(t, "2026-03-03"), CreatedAt: time.Now(), ID: uuid.Max}, 10)
+	if err != nil {
+		t.Fatalf("List after: %v", err)
+	}
+
+	assertIDs(t, after, []uuid.UUID{kept.ID})
+
+	if err := f.repo.Update(t.Context(), user, deleted); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("Update of a deleted entry = %v, want ErrNotFound", err)
+	}
+
+	if err := f.repo.Restore(t.Context(), user, deleted.ID); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	got, err := f.repo.Get(t.Context(), user, deleted.ID)
+	if err != nil || got.Amount != deleted.Amount || got.Note != deleted.Note {
+		t.Errorf("Get after Restore = %+v, %v; want the same entry back", got, err)
+	}
+
+	if err := f.repo.Restore(t.Context(), user, deleted.ID); err != nil {
+		t.Errorf("Restore of an entry that is not deleted = %v, want nil", err)
+	}
+}
+
+func TestOneUserNeverEditsDeletesNorRestoresAnotherUsersEntry(t *testing.T) {
+	f := newFixture(t)
+	a, b := dbtest.NewUser(t, f.d.Queries()), dbtest.NewUser(t, f.d.Queries())
+	aEntry := f.entry(t, a, f.category(t, a, category.Expense, "Groceries"), "2026-03-02", time.Now())
+	bGroceries := f.category(t, b, category.Expense, "Groceries")
+
+	change := aEntry
+	change.Amount = 999
+	if err := f.repo.Update(t.Context(), b, change); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("B's Update of A's entry = %v, want ErrNotFound", err)
+	}
+
+	change.CategoryID = bGroceries
+	if err := f.repo.Update(t.Context(), a, change); err == nil {
+		t.Error("A's Update into B's category succeeded")
+	}
+
+	if err := f.repo.Delete(t.Context(), b, aEntry.ID, time.Now()); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("B's Delete of A's entry = %v, want ErrNotFound", err)
+	}
+
+	if got, err := f.repo.Get(t.Context(), a, aEntry.ID); err != nil || got.Amount != aEntry.Amount {
+		t.Errorf("A's entry after B's attempts = %+v, %v; want it unchanged", got, err)
+	}
+
+	if err := f.repo.Delete(t.Context(), a, aEntry.ID, time.Now()); err != nil {
+		t.Fatalf("A's Delete: %v", err)
+	}
+
+	if err := f.repo.Restore(t.Context(), b, aEntry.ID); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("B's Restore of A's entry = %v, want ErrNotFound", err)
+	}
+
+	if _, err := f.repo.Get(t.Context(), a, aEntry.ID); !errors.Is(err, entry.ErrNotFound) {
+		t.Errorf("A's entry after B's Restore = %v, want it still deleted", err)
+	}
+}
+
 func assertIDs(t *testing.T, got []entry.Entry, want []uuid.UUID) {
 	t.Helper()
 

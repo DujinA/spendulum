@@ -77,7 +77,7 @@ type fakeEntry struct {
 	createdAt time.Time
 }
 
-func (f fixture) entry(t *testing.T, userID uuid.UUID, e fakeEntry) {
+func (f fixture) entry(t *testing.T, userID uuid.UUID, e fakeEntry) uuid.UUID {
 	t.Helper()
 
 	date, err := time.Parse(time.DateOnly, e.date)
@@ -85,13 +85,16 @@ func (f fixture) entry(t *testing.T, userID uuid.UUID, e fakeEntry) {
 		t.Fatal(err)
 	}
 
+	id := uuid.Must(uuid.NewV7())
 	err = entry.NewPostgres(f.d.Queries()).Create(t.Context(), userID, entry.Entry{
-		ID: uuid.Must(uuid.NewV7()), Kind: e.kind, Amount: 1000, Currency: e.currency, CategoryID: e.category,
+		ID: id, Kind: e.kind, Amount: 1000, Currency: e.currency, CategoryID: e.category,
 		VendorID: e.vendor, EntryDate: date, CreatedAt: e.createdAt,
 	})
 	if err != nil {
 		t.Fatalf("create entry: %v", err)
 	}
+
+	return id
 }
 
 func TestUseCreatesAVendorOnceAndAfterwardsAnswersTheOneWithTheSameKey(t *testing.T) {
@@ -162,6 +165,27 @@ func TestListCountsEntriesOfTheKindAndTakesTheLatestByEntryDateThenCreationTime(
 	income := f.list(t, user, category.Income)
 	if got := income["Maxi"]; got.UseCount != 1 || got.Latest == nil || got.Latest.CategoryName != "Gifts" {
 		t.Errorf("Maxi for income = %+v (latest %+v), want 1 use in Gifts", got, got.Latest)
+	}
+}
+
+func TestADeletedEntryNeitherCountsAsAUseNorIsTheLatest(t *testing.T) {
+	f := newFixture(t)
+	user := dbtest.NewUser(t, f.d.Queries())
+	groceries := f.category(t, user, category.Expense, "Groceries")
+	eatingOut := f.category(t, user, category.Expense, "Eating out")
+	maxi := f.use(t, user, "Maxi")
+	at := func(hour int) time.Time { return time.Date(2026, 3, 5, hour, 0, 0, 0, time.UTC) }
+
+	f.entry(t, user, fakeEntry{category.Expense, groceries, maxi, "RSD", "2026-03-01", at(8)})
+	latest := f.entry(t, user, fakeEntry{category.Expense, eatingOut, maxi, "EUR", "2026-03-02", at(9)})
+
+	if err := entry.NewPostgres(f.d.Queries()).Delete(t.Context(), user, latest, at(10)); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	want := vendors.LatestUse{CategoryID: groceries, CategoryName: "Groceries", Currency: "RSD"}
+	if got := f.list(t, user, category.Expense)["Maxi"]; got.UseCount != 1 || got.Latest == nil || *got.Latest != want {
+		t.Errorf("Maxi = %+v (latest %+v), want 1 use, latest %+v", got, got.Latest, want)
 	}
 }
 
