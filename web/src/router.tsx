@@ -77,22 +77,26 @@ const entriesRoute = createRoute({
 export const editEntryRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/entries/$entryId",
-  loader: async ({ context: { queryClient, api }, params: { entryId } }) => {
-    try {
-      await Promise.all([
-        queryClient.query(settingsQuery(api)),
-        queryClient.query(currenciesQuery(api)),
-        queryClient.query(categoriesQuery(api)),
-        queryClient.query(entryQuery(api, entryId)),
-      ]);
-    } catch (error) {
-      // An entry deleted on another device has nothing to edit.
-      if (error instanceof ApiError && error.status === 404) {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- TanStack Router redirects by throwing
-        throw redirect({ to: "/entries", replace: true });
+  loader: {
+    // A form takes its values once, so it waits for the entry as it is now instead of showing the last one loaded.
+    staleReloadMode: "blocking",
+    handler: async ({ context: { queryClient, api }, params: { entryId } }) => {
+      try {
+        await Promise.all([
+          queryClient.query(settingsQuery(api)),
+          queryClient.query(currenciesQuery(api)),
+          queryClient.query(categoriesQuery(api)),
+          queryClient.query(entryQuery(api, entryId)),
+        ]);
+      } catch (error) {
+        // An entry deleted on another device has nothing to edit.
+        if (error instanceof ApiError && error.status === 404) {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- TanStack Router redirects by throwing
+          throw redirect({ to: "/entries", replace: true });
+        }
+        throw error;
       }
-      throw error;
-    }
+    },
   },
   component: function EditEntry(): ReactNode {
     const { entryId }: { entryId: string } = editEntryRoute.useParams();
@@ -110,14 +114,18 @@ const newEntryRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): NewEntrySearch =>
     typeof search.repeat === "string" ? { repeat: search.repeat } : {},
   loaderDeps: ({ search }) => ({ repeat: search.repeat }),
-  loader: async ({ context: { queryClient, api }, deps: { repeat } }) => {
-    const [, , , source] = await Promise.all([
-      queryClient.query(settingsQuery(api)),
-      queryClient.query(currenciesQuery(api)),
-      queryClient.query(categoriesQuery(api)),
-      repeat === undefined ? undefined : repeatSource(queryClient, api, repeat),
-    ]);
-    return { source };
+  loader: {
+    // The keypad takes a repeated entry's values once, so it waits for the entry as it is now.
+    staleReloadMode: "blocking",
+    handler: async ({ context: { queryClient, api }, deps: { repeat } }) => {
+      const [, , , source] = await Promise.all([
+        queryClient.query(settingsQuery(api)),
+        queryClient.query(currenciesQuery(api)),
+        queryClient.query(categoriesQuery(api)),
+        repeat === undefined ? undefined : repeatSource(queryClient, api, repeat),
+      ]);
+      return { source };
+    },
   },
   component: function NewEntry(): ReactNode {
     const { source }: { source: Entry | undefined } = newEntryRoute.useLoaderData();

@@ -178,6 +178,18 @@ describe("edit form", () => {
     expect(await within(form).findByRole("alert")).toHaveTextContent("The category does not exist or is of the other kind.");
   });
 
+  it("opens with the entry as it is now after it changed on another device", async () => {
+    const { fake } = await openList({ entries: [maxiEntry()] });
+    await openEdit(/Maxi/);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("heading", { level: 1, name: "Entries" });
+
+    Object.assign(fake.entries[0] ?? {}, { note: "changed elsewhere" });
+    const form = await openEdit(/Maxi/);
+
+    expect(within(form).getByRole("textbox", { name: "Note" })).toHaveValue("changed elsewhere");
+  });
+
   it("goes back to the list without saving on Cancel", async () => {
     const { fake } = await openList({ entries: [maxiEntry()] });
     await openEdit(/Maxi/);

@@ -11,15 +11,26 @@ export function useUndoToasts() {
   const api = useApi();
   const queryClient = useQueryClient();
 
+  // The toast stays until Undo succeeds, so a failed Undo can be tapped again while it shows.
   function offerUndo(message: string, undo: () => Promise<unknown>) {
-    toast(message, {
+    let pending = false;
+    const id = toast(message, {
       duration: undoToastDuration,
       action: {
         label: "Undo",
-        onClick: () => {
+        onClick: (event) => {
+          event.preventDefault();
+          if (pending) return;
+          pending = true;
           undo().then(
-            () => invalidateEntries(queryClient),
-            () => toast.error("Could not undo. Check your connection and try again."),
+            () => {
+              toast.dismiss(id);
+              return invalidateEntries(queryClient);
+            },
+            () => {
+              pending = false;
+              toast.error("Could not undo. Check your connection and try again.");
+            },
           );
         },
       },

@@ -88,7 +88,12 @@ export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
   const vendorLabel = vendorLabelFor(kind);
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
-  const category = kindCategories.find((c) => c.id === categoryId);
+  // An archived category is hidden from the picker but stays on a repeated entry.
+  const category: Pick<Category, "id" | "name"> | undefined =
+    kindCategories.find((c) => c.id === categoryId) ??
+    (repeat && repeat.categoryId === categoryId && repeat.kind === kind
+      ? { id: repeat.categoryId, name: repeat.categoryName }
+      : undefined);
   const draft: NewEntry | undefined =
     magnitude > 0 && category
       ? {

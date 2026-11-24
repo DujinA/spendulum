@@ -71,19 +71,35 @@ function useDeleteEntry() {
   const queryClient = useQueryClient();
   const undoToasts = useUndoToasts();
 
+  const listKey = entriesQuery(api).queryKey;
+
   return useMutation({
-    mutationFn: (id: string) => deleteEntry(api, id),
-    onMutate: async (id) => {
+    mutationFn: (entry: Entry) => deleteEntry(api, entry.id),
+    onMutate: async (entry) => {
       await queryClient.cancelQueries({ queryKey: entriesQueryKey });
-      queryClient.setQueryData(entriesQuery(api).queryKey, (data) =>
-        data && { ...data, pages: data.pages.map((page) => ({ ...page, entries: page.entries.filter((e) => e.id !== id) })) },
+      const pages = queryClient.getQueryData(listKey)?.pages ?? [];
+      const page = pages.findIndex((p) => p.entries.some((e) => e.id === entry.id));
+      const index = pages[page]?.entries.findIndex((e) => e.id === entry.id) ?? -1;
+      queryClient.setQueryData(listKey, (data) =>
+        data && { ...data, pages: data.pages.map((p) => ({ ...p, entries: p.entries.filter((e) => e.id !== entry.id) })) },
       );
+      return { page, index };
     },
-    onSuccess: (_, id) => {
-      undoToasts.deleted(id);
+    onSuccess: (_, entry) => {
+      undoToasts.deleted(entry.id);
     },
-    onError: () => {
+    // Puts the row back where it was, since the list may not reload either.
+    onError: (_, entry, at) => {
       toast.error(deleteFailed);
+      if (!at || at.index < 0) return;
+      queryClient.setQueryData(listKey, (data) =>
+        data && {
+          ...data,
+          pages: data.pages.map((p, i) =>
+            i === at.page && !p.entries.some((e) => e.id === entry.id) ? { ...p, entries: p.entries.toSpliced(at.index, 0, entry) } : p,
+          ),
+        },
+      );
     },
     onSettled: () => invalidateEntries(queryClient),
   });
@@ -112,7 +128,7 @@ export function EntriesScreen() {
     },
     onDelete: (entry) => {
       setOpenRowId(undefined);
-      remove.mutate(entry.id);
+      remove.mutate(entry);
     },
   };
   const today = todayIn(settings.timeZone);

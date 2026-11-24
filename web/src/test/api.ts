@@ -156,6 +156,7 @@ export function fakeEntriesApi({
     failLists: 0,
     failCreates: 0,
     failDeletes: 0,
+    failRestores: 0,
     // Holds every list response until the returned function is called.
     holdLists() {
       let release: () => void = () => undefined;
@@ -290,6 +291,10 @@ export function fakeEntriesApi({
     }),
     http.post<{ id: string }>("*/api/entries/:id/restore", ({ params }) => {
       state.restores.push(params.id);
+      if (state.failRestores > 0) {
+        state.failRestores--;
+        return problem(503, "Service Unavailable", "");
+      }
       const entry = state.entries.find((e) => e.id === params.id);
       if (!entry) return problem(404, "Not Found", "");
       state.deleted.delete(params.id);

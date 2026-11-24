@@ -244,6 +244,22 @@ func TestUpdateRecordsTheVendorTheVendorsServiceAnswersAndTheNoteTrimmed(t *test
 	}
 }
 
+func TestUpdateKeepsTheEntrysOwnVendorWithoutUsingItAgain(t *testing.T) {
+	repo, vendors := newFakeRepo(), &fakeVendors{}
+	maxi := uuid.Must(uuid.NewV7())
+	stored := repo.add(entry.Entry{
+		Kind: category.Expense, Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(), VendorID: maxi, VendorName: "Maxi",
+	})
+
+	got, err := newServiceWithVendors(repo, vendors).Update(t.Context(), uuid.Must(uuid.NewV7()), stored.ID, entry.Change{
+		Amount: 100, CategoryID: stored.CategoryID, EntryDate: march2(), VendorName: "Maxi", Note: "only the note changed",
+	})
+
+	if err != nil || got.VendorID != maxi || len(vendors.used) != 0 {
+		t.Errorf("Update = %+v, %v after using %q; want vendor %v kept and not used, so an archived one stays archived", got, err, vendors.used, maxi)
+	}
+}
+
 func TestUpdateOfAnEntryThatIsNotThereIsNotFound(t *testing.T) {
 	_, err := newService(newFakeRepo()).Update(t.Context(), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), entry.Change{
 		Amount: 100, CategoryID: uuid.Must(uuid.NewV7()), EntryDate: march2(),

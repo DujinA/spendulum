@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { eatingOut, fakeEntriesApi, fakeEntry, fakeSessionApi, fakeVendor, groceries, salary } from "@/test/api";
+import { eatingOut, fakeEntriesApi, fakeEntry, fakeSessionApi, fakeVendor, groceries, oldHobby, salary } from "@/test/api";
 import { renderApp } from "@/test/render";
 
 // 09:30 in Belgrade on 2 March 2026.
@@ -465,6 +465,39 @@ describe("Repeat", () => {
     expect(await screen.findByRole("group", { name: "Keypad" })).toBeInTheDocument();
     expect(amount()).toHaveTextContent(/^0\s*din$/);
     expect(tile("Category")).toHaveTextContent("Eating out");
+  });
+
+  it("fills the keypad from the entry as it is now when the same row is repeated again after it changed", async () => {
+    fakeSessionApi({ loggedIn: true });
+    const fake = fakeEntriesApi({ entries: [fakeEntry({ entryDate: "2026-02-01", amount: 45000, categoryId: eatingOut.id, categoryName: eatingOut.name })] });
+    renderApp("/entries");
+    const repeat = async () => {
+      await userEvent.click(await screen.findByRole("button", { name: "Actions for Eating out" }));
+      await userEvent.click(await screen.findByRole("menuitem", { name: "Repeat" }));
+      await screen.findByRole("group", { name: "Keypad" });
+    };
+
+    await repeat();
+    expect(amount()).toHaveTextContent(/^450\.00\s*din$/);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("heading", { level: 1, name: "Entries" });
+    Object.assign(fake.entries[0] ?? {}, { amount: 99900 });
+    await repeat();
+
+    expect(amount()).toHaveTextContent(/^999\.00\s*din$/);
+  });
+
+  it("keeps the row's category when it is archived, though the picker hides it", async () => {
+    fakeSessionApi({ loggedIn: true });
+    const entry = fakeEntry({ entryDate: "2026-02-01", amount: 45000, categoryId: oldHobby.id, categoryName: oldHobby.name });
+    const fake = fakeEntriesApi({ entries: [entry] });
+    renderApp(`/new?repeat=${entry.id}`);
+
+    expect(await screen.findByRole("button", { name: /^Category/ })).toHaveTextContent("Old hobby");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByRole("heading", { level: 1, name: "Entries" });
+    expect(fake.creates.map((c) => c.body.categoryId)).toEqual([oldHobby.id]);
   });
 
   it("opens an empty keypad when the repeated entry was deleted meanwhile", async () => {

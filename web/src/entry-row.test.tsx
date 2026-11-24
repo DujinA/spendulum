@@ -68,6 +68,41 @@ describe("entry row actions", () => {
     expect(screen.queryByText("Deleted")).not.toBeInTheDocument();
   });
 
+  it("brings the row back when the delete fails even if the list cannot reload either", async () => {
+    const { fake } = await openList();
+    fake.failDeletes = 1;
+    fake.failLists = 1;
+
+    await userEvent.click(within(row(/Kafeterija/)).getByRole("button", { name: /^Actions/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    expect(await screen.findByText(/Could not delete/)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Kafeterija/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /older|Kafeterija/ }).map((l) => l.textContent)).toEqual([
+      expect.stringMatching(/^Kafeterija/),
+      expect.stringMatching(/older/),
+    ]);
+  });
+
+  it("keeps Undo in the toast when undoing fails, so it can be tapped again", async () => {
+    const { fake, entries } = await openList();
+    fake.failRestores = 1;
+    await userEvent.click(within(row(/Kafeterija/)).getByRole("button", { name: /^Actions/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(await screen.findByText(/Could not undo/)).toBeInTheDocument();
+    // Long enough for a closing toast to leave the page.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByRole("link", { name: /Kafeterija/ })).toBeInTheDocument();
+    expect(fake.restores).toEqual([entries[0]?.id, entries[0]?.id]);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+    });
+  });
+
   it("reveals Repeat and Delete when a row is swiped left on a touch screen, and hides them when swiped back", async () => {
     await openList();
     const listRow = row(/Kafeterija/);

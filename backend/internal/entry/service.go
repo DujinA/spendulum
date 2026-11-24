@@ -160,9 +160,13 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, c Change) (E
 			return err
 		}
 
-		e.Amount, e.CategoryID, e.VendorID, e.EntryDate, e.Note = c.Amount, c.CategoryID, uuid.Nil, c.EntryDate, c.Note
+		e.Amount, e.CategoryID, e.EntryDate, e.Note = c.Amount, c.CategoryID, c.EntryDate, c.Note
 
-		if c.VendorName != "" {
+		// The entry's own vendor is kept as it is, so an edit of other fields never unarchives it.
+		switch {
+		case c.VendorName == "":
+			e.VendorID = uuid.Nil
+		case c.VendorName != e.VendorName:
 			if e.VendorID, err = s.d.Vendors.Use(ctx, userID, c.VendorName); err != nil {
 				return err //nolint:wrapcheck // wrapped below
 			}
