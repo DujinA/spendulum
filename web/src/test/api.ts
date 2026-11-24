@@ -152,6 +152,17 @@ export function fakeEntriesApi({
         release();
       };
     },
+    // Holds every restore response until the returned function is called.
+    holdRestores() {
+      let release: () => void = () => undefined;
+      restoresHeld = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        restoresHeld = undefined;
+        release();
+      };
+    },
     listRequests: 0,
     failLists: 0,
     failCreates: 0,
@@ -171,6 +182,7 @@ export function fakeEntriesApi({
   };
   let held: Promise<void> | undefined;
   let vendorsHeld: Promise<void> | undefined;
+  let restoresHeld: Promise<void> | undefined;
   const byKey = new Map<string, Entry>();
 
   const live = (id: string) => state.entries.find((e) => e.id === id && !state.deleted.has(id));
@@ -289,8 +301,9 @@ export function fakeEntriesApi({
       state.deleted.add(params.id);
       return new HttpResponse(null, { status: 204 });
     }),
-    http.post<{ id: string }>("*/api/entries/:id/restore", ({ params }) => {
+    http.post<{ id: string }>("*/api/entries/:id/restore", async ({ params }) => {
       state.restores.push(params.id);
+      await restoresHeld;
       if (state.failRestores > 0) {
         state.failRestores--;
         return problem(503, "Service Unavailable", "");

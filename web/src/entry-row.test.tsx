@@ -104,6 +104,28 @@ describe("entry row actions", () => {
     });
   });
 
+  it("never offers Undo again when a slow Undo fails after its toast closed", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"], now: new Date("2026-03-02T08:30:00Z"), shouldAdvanceTime: true });
+    const { fake } = await openList();
+    fake.failRestores = 1;
+    const release = fake.holdRestores();
+    await userEvent.click(within(row(/Kafeterija/)).getByRole("button", { name: /^Actions/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    await userEvent.click(undo);
+    await userEvent.unhover(undo);
+
+    await vi.advanceTimersByTimeAsync(9000);
+    await waitFor(() => {
+      expect(screen.queryByText("Deleted")).not.toBeInTheDocument();
+    });
+    release();
+
+    expect(await screen.findByText(/Could not undo/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Kafeterija/ })).not.toBeInTheDocument();
+  });
+
   it("reveals Repeat and Delete when a row is swiped left on a touch screen, and hides them when swiped back", async () => {
     await openList();
     const listRow = row(/Kafeterija/);
