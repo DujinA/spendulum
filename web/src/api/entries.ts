@@ -1,7 +1,8 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { apiError, type ApiClient } from "@/api/client";
 import type { components } from "@/api/schema.gen";
+import { vendorsQueryKey } from "@/api/vendors";
 
 export type Entry = components["schemas"]["Entry"];
 export type NewEntry = components["schemas"]["NewEntry"];
@@ -45,6 +46,14 @@ export function categoriesQuery(api: ApiClient) {
 }
 
 export const entriesQueryKey = ["entries"] as const;
+
+// A change to an entry also changes its vendor's use count and latest category.
+export function invalidateEntries(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: entriesQueryKey }),
+    queryClient.invalidateQueries({ queryKey: vendorsQueryKey }),
+  ]);
+}
 
 export function entriesQuery(api: ApiClient) {
   return infiniteQueryOptions({

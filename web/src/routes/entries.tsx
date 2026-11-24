@@ -5,8 +5,16 @@ import { useEffect, useEffectEvent, useId, useRef, useState, type PointerEvent, 
 import { toast } from "sonner";
 
 import { useApi } from "@/api/context";
-import { currenciesQuery, deleteEntry, entriesQuery, entriesQueryKey, settingsQuery, type Entry } from "@/api/entries";
-import { vendorsQueryKey } from "@/api/vendors";
+import { deleteFailed } from "@/api/client";
+import {
+  currenciesQuery,
+  deleteEntry,
+  entriesQuery,
+  entriesQueryKey,
+  invalidateEntries,
+  settingsQuery,
+  type Entry,
+} from "@/api/entries";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -75,18 +83,14 @@ function useDeleteEntry() {
       undoToasts.deleted(id);
     },
     onError: () => {
-      toast.error("Could not delete. Check your connection and try again.");
+      toast.error(deleteFailed);
     },
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: entriesQueryKey }),
-        queryClient.invalidateQueries({ queryKey: vendorsQueryKey }),
-      ]),
+    onSettled: () => invalidateEntries(queryClient),
   });
 }
 
 interface RowActions {
-  swiped: string | undefined;
+  openRowId: string | undefined;
   onSwipe: (id: string | undefined) => void;
   onRepeat: (entry: Entry) => void;
   onDelete: (entry: Entry) => void;
@@ -99,15 +103,15 @@ export function EntriesScreen() {
   const { data: currencies } = useSuspenseQuery(currenciesQuery(api));
   const entries = useSuspenseInfiniteQuery(entriesQuery(api));
   const remove = useDeleteEntry();
-  const [swiped, setSwiped] = useState<string>();
+  const [openRowId, setOpenRowId] = useState<string>();
   const actions: RowActions = {
-    swiped,
-    onSwipe: setSwiped,
+    openRowId,
+    onSwipe: setOpenRowId,
     onRepeat: (entry) => {
       void navigate({ to: "/new", search: { repeat: entry.id } });
     },
     onDelete: (entry) => {
-      setSwiped(undefined);
+      setOpenRowId(undefined);
       remove.mutate(entry.id);
     },
   };
@@ -252,7 +256,7 @@ function EntryRow({ entry, currency, actions }: { entry: Entry; currency: Curren
   const isRefund = entry.amount < 0;
   const title = entry.vendorName ?? entry.categoryName;
   const details = [entry.vendorName ? entry.categoryName : "", entry.note].filter((part) => part !== "").join(" · ");
-  const open = actions.swiped === entry.id;
+  const open = actions.openRowId === entry.id;
   const swipe = useSwipe(open, (next) => {
     actions.onSwipe(next ? entry.id : undefined);
   });
@@ -271,7 +275,7 @@ function EntryRow({ entry, currency, actions }: { entry: Entry; currency: Curren
         <SwipeAction
           label="Delete"
           icon={Trash2}
-          className="bg-destructive text-white"
+          className="bg-destructive text-destructive-foreground"
           onClick={() => {
             actions.onDelete(entry);
           }}

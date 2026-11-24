@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Check, Delete, Undo2 } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { ApiError } from "@/api/client";
+import { saveError } from "@/api/client";
 import { useApi } from "@/api/context";
 import {
   categoriesQuery,
@@ -16,7 +16,7 @@ import {
   type Kind,
   type NewEntry,
 } from "@/api/entries";
-import { vendorsQuery, vendorsQueryKey, type Vendor } from "@/api/vendors";
+import { vendorLabelFor, vendorsQuery, vendorsQueryKey, type Vendor } from "@/api/vendors";
 import { EntrySheet } from "@/components/entry-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ import {
 import { useBackToEntries } from "@/lib/navigation";
 import { useUndoToasts } from "@/lib/undo-toasts";
 import { cn } from "@/lib/utils";
+import { newIdempotencyKey } from "@/lib/idempotency";
 
 type Sheet = "vendor" | "category" | "date" | "note";
 
@@ -53,10 +54,6 @@ function isControl(target: EventTarget | null) {
   return target instanceof HTMLElement && target.closest("button, a") !== null;
 }
 
-function saveError(error: Error) {
-  if (error instanceof ApiError && error.status === 422) return error.message;
-  return "Could not save. Check your connection and try again.";
-}
 
 // Repeat copies an entry into a new one dated today; its category counts as the user's pick.
 export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
@@ -70,10 +67,11 @@ export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
   const { data: currencies } = useSuspenseQuery(currenciesQuery(api));
   const currency = findCurrency(currencies, settings.primaryCurrency);
 
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
   const [today] = useState(() => todayIn(settings.timeZone));
   const [kind, setKind] = useState<Kind>(repeat?.kind ?? "expense");
-  const [typed, setTyped] = useState(repeat ? toTyped(repeat.amount, currency) : "");
+  // The keypad records the primary currency (#36 adds a currency button), so another currency's amount is not copied.
+  const [typed, setTyped] = useState(repeat?.currency === currency.code ? toTyped(repeat.amount, currency) : "");
   const [refund, setRefund] = useState(repeat ? repeat.amount < 0 : false);
   const [vendor, setVendor] = useState<{ name: string; isNew: boolean } | undefined>(
     repeat?.vendorName ? { name: repeat.vendorName, isNew: false } : undefined,
@@ -87,7 +85,7 @@ export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
   // Only a control reached with Tab keeps its own Enter; after a tap or click, Enter saves.
   const focusedByTab = useRef(false);
 
-  const vendorLabel = kind === "income" ? "Source" : "Vendor";
+  const vendorLabel = vendorLabelFor(kind);
   const magnitude = toMinorUnits(typed, currency);
   const kindCategories = categories.filter((c) => c.kind === kind);
   const category = kindCategories.find((c) => c.id === categoryId);
@@ -110,13 +108,9 @@ export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
     onSuccess: async (entry, { another }) => {
       undoToasts.saved(entry.id, `Saved ${formatMoney(entry.amount, findCurrency(currencies, entry.currency))}`);
       void queryClient.invalidateQueries({ queryKey: vendorsQueryKey });
-      if (another) {
-        startAnother();
-        await queryClient.resetQueries({ queryKey: entriesQueryKey });
-        return;
-      }
+      if (another) startAnother();
       await queryClient.resetQueries({ queryKey: entriesQueryKey });
-      await navigate({ to: "/entries", replace: true });
+      if (!another) await navigate({ to: "/entries", replace: true });
     },
   });
 
@@ -126,7 +120,7 @@ export function NewEntryScreen({ repeat }: { repeat?: Entry | undefined }) {
 
   // The next entry keeps the kind and the date, and is a new request with its own key.
   function startAnother() {
-    setIdempotencyKey(crypto.randomUUID());
+    setIdempotencyKey(newIdempotencyKey());
     setTyped("");
     setRefund(false);
     setVendor(undefined);

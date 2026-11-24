@@ -452,6 +452,21 @@ describe("Repeat", () => {
     expect(screen.queryByRole("button", { name: "Refund" })).not.toBeInTheDocument();
   });
 
+  it("leaves the amount empty when the row is in another currency than the primary one, which the keypad records", async () => {
+    fakeSessionApi({ loggedIn: true });
+    fakeEntriesApi({
+      entries: [fakeEntry({ entryDate: "2026-02-01", amount: 1250, currency: "EUR", categoryId: eatingOut.id, categoryName: eatingOut.name })],
+    });
+    renderApp("/entries");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Actions for Eating out" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Repeat" }));
+
+    expect(await screen.findByRole("group", { name: "Keypad" })).toBeInTheDocument();
+    expect(amount()).toHaveTextContent(/^0\s*din$/);
+    expect(tile("Category")).toHaveTextContent("Eating out");
+  });
+
   it("opens an empty keypad when the repeated entry was deleted meanwhile", async () => {
     fakeSessionApi({ loggedIn: true });
     const entry = fakeEntry({ entryDate: "2026-02-01" });

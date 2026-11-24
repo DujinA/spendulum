@@ -5,7 +5,7 @@ import { useId, useState, type ReactNode } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
-import { ApiError } from "@/api/client";
+import { deleteFailed, saveError } from "@/api/client";
 import { useApi } from "@/api/context";
 import {
   categoriesQuery,
@@ -19,7 +19,7 @@ import {
   type Entry,
   type EntryChange,
 } from "@/api/entries";
-import { vendorsQueryKey } from "@/api/vendors";
+import { vendorLabelFor, vendorsQueryKey } from "@/api/vendors";
 import { EntrySheet } from "@/components/entry-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,10 +55,6 @@ function categoryChoices(categories: Category[], entry: Entry) {
   return choices;
 }
 
-function saveError(error: Error) {
-  if (error instanceof ApiError && error.status === 422) return error.message;
-  return "Could not save. Check your connection and try again.";
-}
 
 export function EditEntryScreen({ entryId }: { entryId: string }) {
   const api = useApi();
@@ -73,7 +69,7 @@ export function EditEntryScreen({ entryId }: { entryId: string }) {
   const [today] = useState(() => todayIn(settings.timeZone));
   const [vendorSheet, setVendorSheet] = useState(false);
   const titleId = useId();
-  const vendorLabel = entry.kind === "income" ? "Source" : "Vendor";
+  const vendorLabel = vendorLabelFor(entry.kind);
 
   const { control, register, handleSubmit, setValue, formState } = useForm<EntryForm>({
     resolver: zodResolver(entryForm(currency)),
@@ -223,7 +219,7 @@ export function EditEntryScreen({ entryId }: { entryId: string }) {
         )}
         {remove.error && (
           <p role="alert" className="text-destructive text-sm">
-            Could not delete. Check your connection and try again.
+            {deleteFailed}
           </p>
         )}
 

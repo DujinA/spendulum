@@ -2,8 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useApi } from "@/api/context";
-import { deleteEntry, entriesQueryKey, restoreEntry } from "@/api/entries";
-import { vendorsQueryKey } from "@/api/vendors";
+import { deleteEntry, invalidateEntries, restoreEntry } from "@/api/entries";
 
 // Undo is offered only while the toast shows (#2); afterwards a deleted entry cannot be restored.
 export const undoToastDuration = 8000;
@@ -19,11 +18,7 @@ export function useUndoToasts() {
         label: "Undo",
         onClick: () => {
           undo().then(
-            () =>
-              Promise.all([
-                queryClient.invalidateQueries({ queryKey: entriesQueryKey }),
-                queryClient.invalidateQueries({ queryKey: vendorsQueryKey }),
-              ]),
+            () => invalidateEntries(queryClient),
             () => toast.error("Could not undo. Check your connection and try again."),
           );
         },

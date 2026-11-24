@@ -69,7 +69,7 @@ func (n NewEntry) normalized() (NewEntry, error) {
 	return n, nil
 }
 
-// Change is an edit of an entry: its kind and currency never change, and an empty vendor name is no vendor.
+// Change is an edit of an entry: the kind never changes, it carries no currency, and an empty vendor name is no vendor.
 type Change struct {
 	Amount     int64
 	CategoryID uuid.UUID

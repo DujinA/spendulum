@@ -26,9 +26,9 @@ async function openList() {
 
 function row(name: RegExp) {
   const link = screen.getByRole("link", { name });
-  const item = link.closest("li");
-  if (!item) throw new Error("the link is not in a row");
-  return item;
+  const listRow = link.closest("li");
+  if (!listRow) throw new Error("the link is not in a row");
+  return listRow;
 }
 
 function swipe(element: HTMLElement, from: number, to: number) {
@@ -70,20 +70,20 @@ describe("entry row actions", () => {
 
   it("reveals Repeat and Delete when a row is swiped left on a touch screen, and hides them when swiped back", async () => {
     await openList();
-    const item = row(/Kafeterija/);
+    const listRow = row(/Kafeterija/);
     const content = screen.getByRole("link", { name: /Kafeterija/ });
 
-    expect(within(item).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(within(listRow).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 
     swipe(content, 300, 150);
 
-    expect(within(item).getByRole("button", { name: "Repeat" })).toBeInTheDocument();
-    expect(within(item).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(within(listRow).getByRole("button", { name: "Repeat" })).toBeInTheDocument();
+    expect(within(listRow).getByRole("button", { name: "Delete" })).toBeInTheDocument();
     expect(within(row(/older/)).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
 
     swipe(content, 150, 300);
 
-    expect(within(item).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(within(listRow).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("deletes a swiped row with its Delete button", async () => {

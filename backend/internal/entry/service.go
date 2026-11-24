@@ -179,12 +179,16 @@ func (s *Service) Update(ctx context.Context, userID, id uuid.UUID, c Change) (E
 
 // Delete hides the entry from every list and report until Restore; deleted entries are never purged.
 func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
-	return s.d.Repo.Delete(ctx, userID, id, s.d.Now()) //nolint:wrapcheck // ErrNotFound must reach the caller as is
+	if err := s.d.Repo.Delete(ctx, userID, id, s.d.Now()); err != nil {
+		return fmt.Errorf("entry: delete: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) Restore(ctx context.Context, userID, id uuid.UUID) (Entry, error) {
 	if err := s.d.Repo.Restore(ctx, userID, id); err != nil {
-		return Entry{}, err //nolint:wrapcheck // ErrNotFound must reach the caller as is
+		return Entry{}, fmt.Errorf("entry: restore: %w", err)
 	}
 
 	return s.Get(ctx, userID, id)

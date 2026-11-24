@@ -19,13 +19,16 @@ function groupThousands(digits: string) {
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// Amounts are integer minor units, so this works on digits, never on floats.
-export function formatMoney(amount: number, currency: Currency) {
-  const units = currency.minorUnits;
+// Amounts are integer minor units, so this works on digits, never on floats: 178080 in RSD is "1780" and "80".
+function splitDigits(amount: number, units: number) {
   const digits = String(Math.abs(amount)).padStart(units + 1, "0");
-  const whole = groupThousands(digits.slice(0, digits.length - units));
-  const fraction = units > 0 ? `.${digits.slice(digits.length - units)}` : "";
-  return `${amount < 0 ? "−" : ""}${whole}${fraction} ${currencyLabel(currency.code)}`;
+  return { whole: digits.slice(0, digits.length - units), fraction: digits.slice(digits.length - units) };
+}
+
+export function formatMoney(amount: number, currency: Currency) {
+  const { whole, fraction } = splitDigits(amount, currency.minorUnits);
+  const decimals = currency.minorUnits > 0 ? `.${fraction}` : "";
+  return `${amount < 0 ? "−" : ""}${groupThousands(whole)}${decimals} ${currencyLabel(currency.code)}`;
 }
 
 export function isAmountKey(key: string) {
@@ -64,14 +67,15 @@ export function formatTyped(typed: string) {
 
 // Every minor digit, so the keypad and the edit form start from the stored amount: 178080 in RSD is "1780.80".
 export function toTyped(amount: number, currency: Currency) {
-  const units = currency.minorUnits;
-  const digits = String(Math.abs(amount)).padStart(units + 1, "0");
-  return units > 0 ? `${digits.slice(0, -units)}.${digits.slice(-units)}` : digits;
+  const { whole, fraction } = splitDigits(amount, currency.minorUnits);
+  return currency.minorUnits > 0 ? `${whole}.${fraction}` : whole;
 }
 
 // Minor units of a typed amount, with "." or "," before at most the currency's minor digits; undefined when it is not one.
+const typedAmount = new RegExp(`^(\\d{1,${String(maxIntegerDigits)}})(?:[.,](\\d*))?$`);
+
 export function parseAmount(text: string, currency: Currency) {
-  const match = /^(\d{1,12})(?:[.,](\d*))?$/.exec(text.trim());
+  const match = typedAmount.exec(text.trim());
   if (!match) return undefined;
   const [, whole = "", fraction = ""] = match;
   if (fraction.length > currency.minorUnits) return undefined;

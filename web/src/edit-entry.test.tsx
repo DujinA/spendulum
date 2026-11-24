@@ -29,7 +29,7 @@ const maxi = fakeVendor({
   latest: { categoryId: groceries.id, categoryName: groceries.name, currency: "RSD" },
 });
 
-function shop(fields: Partial<Parameters<typeof fakeEntry>[0]> = {}) {
+function maxiEntry(fields: Partial<Parameters<typeof fakeEntry>[0]> = {}) {
   return fakeEntry({
     entryDate: "2026-03-01",
     amount: 178080,
@@ -55,7 +55,7 @@ async function openEdit(name: RegExp) {
 
 describe("edit form", () => {
   it("opens from a tapped row with amount, Refund, vendor, category, date, note and currency, and shows the kind without a way to change it", async () => {
-    await openList({ entries: [shop({ amount: -178080, currency: "EUR", categoryId: eatingOut.id, categoryName: eatingOut.name })] });
+    await openList({ entries: [maxiEntry({ amount: -178080, currency: "EUR", categoryId: eatingOut.id, categoryName: eatingOut.name })] });
 
     const form = await openEdit(/Maxi/);
 
@@ -73,7 +73,7 @@ describe("edit form", () => {
   it("offers only the entry's own kind's categories, keeping an archived one it already has", async () => {
     await openList({
       categories: [groceries, eatingOut, oldHobby, salary, otherIncome],
-      entries: [shop({ categoryId: oldHobby.id, categoryName: oldHobby.name })],
+      entries: [maxiEntry({ categoryId: oldHobby.id, categoryName: oldHobby.name })],
     });
 
     const form = await openEdit(/Maxi/);
@@ -96,7 +96,7 @@ describe("edit form", () => {
   });
 
   it("saves the change without an Idempotency-Key and the list shows it", async () => {
-    const entry = shop();
+    const entry = maxiEntry();
     const { fake } = await openList({ entries: [entry] });
     const form = await openEdit(/Maxi/);
 
@@ -125,7 +125,7 @@ describe("edit form", () => {
   });
 
   it("changes the vendor in the sheet or leaves it empty", async () => {
-    const { fake } = await openList({ entries: [shop()], vendors: { expense: [maxi, fakeVendor({ name: "Lidl" })] } });
+    const { fake } = await openList({ entries: [maxiEntry()], vendors: { expense: [maxi, fakeVendor({ name: "Lidl" })] } });
     const form = await openEdit(/Maxi/);
 
     await userEvent.click(within(form).getByRole("button", { name: /^Vendor/ }));
@@ -156,7 +156,7 @@ describe("edit form", () => {
     ["12.345", "Type an amount like 1780.80."],
     ["", "Type an amount like 1780.80."],
   ])("refuses the amount %j before sending anything", async (typed, message) => {
-    const { fake } = await openList({ entries: [shop()] });
+    const { fake } = await openList({ entries: [maxiEntry()] });
     const form = await openEdit(/Maxi/);
 
     const amount = within(form).getByRole("textbox", { name: "Amount" });
@@ -170,7 +170,7 @@ describe("edit form", () => {
   });
 
   it("shows the server's reason when it refuses the change", async () => {
-    await openList({ entries: [shop()], categories: [eatingOut, salary] });
+    await openList({ entries: [maxiEntry()], categories: [eatingOut, salary] });
     const form = await openEdit(/Maxi/);
 
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
@@ -179,7 +179,7 @@ describe("edit form", () => {
   });
 
   it("goes back to the list without saving on Cancel", async () => {
-    const { fake } = await openList({ entries: [shop()] });
+    const { fake } = await openList({ entries: [maxiEntry()] });
     await openEdit(/Maxi/);
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -192,7 +192,7 @@ describe("edit form", () => {
 describe("delete with Undo", () => {
   async function deleteFromForm() {
     const kept = fakeEntry({ entryDate: "2026-02-28", note: "kept" });
-    const deleted = shop();
+    const deleted = maxiEntry();
     const { fake } = await openList({ entries: [kept, deleted] });
     const form = await openEdit(/Maxi/);
     await userEvent.click(within(form).getByRole("button", { name: "Delete" }));

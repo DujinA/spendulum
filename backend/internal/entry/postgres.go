@@ -61,35 +61,26 @@ func (p *Postgres) Update(ctx context.Context, userID uuid.UUID, e Entry) error 
 		return ErrUnknownCategory
 	}
 
-	switch {
-	case err != nil:
-		return fmt.Errorf("entry: update: %w", err)
-	case n == 0:
-		return ErrNotFound
-	}
-
-	return nil
+	return changedOne(n, err, "update")
 }
 
 func (p *Postgres) Delete(ctx context.Context, userID, id uuid.UUID, at time.Time) error {
 	n, err := p.q.DeleteEntry(ctx, gen.DeleteEntryParams{DeletedAt: at, UserID: userID, ID: id})
 
-	switch {
-	case err != nil:
-		return fmt.Errorf("entry: delete: %w", err)
-	case n == 0:
-		return ErrNotFound
-	}
-
-	return nil
+	return changedOne(n, err, "delete")
 }
 
 func (p *Postgres) Restore(ctx context.Context, userID, id uuid.UUID) error {
 	n, err := p.q.RestoreEntry(ctx, gen.RestoreEntryParams{UserID: userID, ID: id})
 
+	return changedOne(n, err, "restore")
+}
+
+// changedOne answers ErrNotFound when the statement changed none of the user's entries.
+func changedOne(n int64, err error, action string) error {
 	switch {
 	case err != nil:
-		return fmt.Errorf("entry: restore: %w", err)
+		return fmt.Errorf("entry: %s: %w", action, err)
 	case n == 0:
 		return ErrNotFound
 	}

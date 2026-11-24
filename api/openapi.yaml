@@ -423,11 +423,12 @@ paths:
       summary: Edit an entry
       description: |
         Replaces the amount, category, vendor, entry date and note of the
-        entry. The kind and the currency never change. The rules for recording
-        apply: an income amount must be more than 0, an expense amount must not
-        be 0, the category must be of the entry's kind, the note is stored
-        trimmed, and a `vendorName` names one of the user's vendors or creates
-        one. An absent or blank `vendorName` leaves the entry without a vendor.
+        entry. The kind never changes, and the currency stays as recorded. The
+        rules for recording apply: an income amount must be more than 0, an
+        expense amount must not be 0, the category must be of the entry's kind,
+        the note is stored trimmed, and a `vendorName` names one of the user's
+        vendors or creates one. An absent or blank `vendorName` leaves the entry
+        without a vendor.
 
         An edit carries no `Idempotency-Key`: sending the same edit again
         changes nothing more. A deleted entry answers 404.

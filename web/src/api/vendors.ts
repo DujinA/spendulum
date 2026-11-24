@@ -21,3 +21,8 @@ export function vendorsQuery(api: ApiClient, kind: Kind, name: string) {
     },
   });
 }
+
+// On income the vendor is where the money came from.
+export function vendorLabelFor(kind: Kind) {
+  return kind === "income" ? "Source" : "Vendor";
+}
