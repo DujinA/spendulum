@@ -8,6 +8,6 @@ resources:
 
 # CI replaces the tag with `kustomize edit set image` on every merge to master.
 images:
-- digest: sha256:232dff489655d5d91b01308d9d4da39cce924457f6c40d06cd622a601d91842c
+- digest: sha256:35e36780557786d57f344838d1603177825c6ea1bdd244cc4be38723acf6a575
   name: ghcr.io/dujina/spendulum
-  newTag: sha-47c6f0c5dd0862f96c719d9fbd2f27c91fd03ec5
+  newTag: sha-0333a0623adb74da6f8b8e5cfc4c6dce819e8d88
