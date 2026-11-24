@@ -91,10 +91,11 @@ describe("entry row actions", () => {
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
-    expect(await screen.findByText(/Could not undo/)).toBeInTheDocument();
+    const failed = (await screen.findByText(/Could not undo/)).closest("li");
     // Long enough for a closing toast to leave the page.
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(within(failed ?? document.body).getByText("Deleted")).toBeInTheDocument();
+    await userEvent.click(within(failed ?? document.body).getByRole("button", { name: "Undo" }));
 
     expect(await screen.findByRole("link", { name: /Kafeterija/ })).toBeInTheDocument();
     expect(fake.restores).toEqual([entries[0]?.id, entries[0]?.id]);

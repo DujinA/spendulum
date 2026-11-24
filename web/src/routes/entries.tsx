@@ -93,12 +93,9 @@ function useDeleteEntry() {
       toast.error(deleteFailed);
       if (!at || at.index < 0) return;
       queryClient.setQueryData(listKey, (data) =>
-        data && {
-          ...data,
-          pages: data.pages.map((p, i) =>
-            i === at.page && !p.entries.some((e) => e.id === entry.id) ? { ...p, entries: p.entries.toSpliced(at.index, 0, entry) } : p,
-          ),
-        },
+        data && !data.pages.some((p) => p.entries.some((e) => e.id === entry.id))
+          ? { ...data, pages: data.pages.map((p, i) => (i === at.page ? { ...p, entries: p.entries.toSpliced(at.index, 0, entry) } : p)) }
+          : data,
       );
     },
     onSettled: () => invalidateEntries(queryClient),
