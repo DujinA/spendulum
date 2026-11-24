@@ -1,8 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// The operator creates this account with `spendulum user create` before the tests run (Taskfile e2e).
-const email = process.env.E2E_EMAIL ?? "";
-const password = process.env.E2E_PASSWORD ?? "";
+import { email, password } from "../api";
 
 test("logs in, sees the Dashboard and logs out", async ({ page, isMobile }) => {
   expect(email, "E2E_EMAIL is set").not.toBe("");
