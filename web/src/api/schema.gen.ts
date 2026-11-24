@@ -203,8 +203,8 @@ export interface paths {
         };
         /**
          * List entries
-         * @description All of the user's entries, newest entry date first; entries on the same
-         *     date are newest created first. Pass `nextCursor` from a page as `cursor`
+         * @description All of the user's entries except deleted ones, newest entry date first;
+         *     entries on the same date are newest created first. Pass `nextCursor` from a page as `cursor`
          *     to get the page after it.
          */
         get: operations["listEntries"];
@@ -221,7 +221,8 @@ export interface paths {
          *
          *     A retry with the same `Idempotency-Key` and body answers the entry the
          *     first request created, and creates no other. The same key with a
-         *     different body answers 422. Keys are kept for 24 hours.
+         *     different body, or after that entry was deleted, answers 422. Keys are
+         *     kept for 24 hours.
          */
         post: operations["createEntry"];
         delete?: never;
@@ -234,13 +235,59 @@ export interface paths {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
-        /** One entry */
+        /**
+         * One entry
+         * @description A deleted entry answers 404.
+         */
         get: operations["getEntry"];
-        put?: never;
+        /**
+         * Edit an entry
+         * @description Replaces the amount, category, vendor, entry date and note of the
+         *     entry. The kind and the currency never change. The rules for recording
+         *     apply: an income amount must be more than 0, an expense amount must not
+         *     be 0, the category must be of the entry's kind, the note is stored
+         *     trimmed, and a `vendorName` names one of the user's vendors or creates
+         *     one. An absent or blank `vendorName` leaves the entry without a vendor.
+         *
+         *     An edit carries no `Idempotency-Key`: sending the same edit again
+         *     changes nothing more. A deleted entry answers 404.
+         */
+        put: operations["updateEntry"];
         post?: never;
+        /**
+         * Delete an entry
+         * @description The entry leaves every list and report at once. `restoreEntry` brings
+         *     it back; deleted entries are never purged. Deleting a deleted entry
+         *     answers 204 again.
+         */
+        delete: operations["deleteEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/entries/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo deleting an entry
+         * @description Brings a deleted entry back, with the same id and contents. An entry
+         *     that is not deleted is answered as it is.
+         */
+        post: operations["restoreEntry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -339,6 +386,23 @@ export interface components {
             /**
              * Format: uuid
              * @description A category of the same kind.
+             */
+            categoryId: string;
+            /** @description Who the expense was paid to or the income came from. Absent or blank means no vendor. */
+            vendorName?: string;
+            /** Format: date */
+            entryDate: string;
+            note?: string;
+        };
+        EntryChange: {
+            /**
+             * Format: int64
+             * @description In minor units of the entry's currency; negative only for a refund.
+             */
+            amount: number;
+            /**
+             * Format: uuid
+             * @description A category of the entry's kind.
              */
             categoryId: string;
             /** @description Who the expense was paid to or the income came from. Absent or blank means no vendor. */
@@ -871,6 +935,87 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EntryChange"];
+            };
+        };
+        responses: {
+            /** @description The entry after the edit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+        };
+    };
+    deleteEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry is deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
+        };
+    };
+    restoreEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The restored entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Entry"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            415: components["responses"]["UnsupportedMediaType"];
         };
     };
     getHealthz: {

@@ -323,8 +323,8 @@ paths:
       operationId: listEntries
       summary: List entries
       description: |
-        All of the user's entries, newest entry date first; entries on the same
-        date are newest created first. Pass `nextCursor` from a page as `cursor`
+        All of the user's entries except deleted ones, newest entry date first;
+        entries on the same date are newest created first. Pass `nextCursor` from a page as `cursor`
         to get the page after it.
       tags: [entries]
       parameters:
@@ -366,7 +366,8 @@ paths:
 
         A retry with the same `Idempotency-Key` and body answers the entry the
         first request created, and creates no other. The same key with a
-        different body answers 422. Keys are kept for 24 hours.
+        different body, or after that entry was deleted, answers 422. Keys are
+        kept for 24 hours.
       tags: [entries]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -392,17 +393,18 @@ paths:
         "422":
           $ref: "#/components/responses/UnprocessableContent"
   /api/entries/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     get:
       operationId: getEntry
       summary: One entry
+      description: A deleted entry answers 404.
       tags: [entries]
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
       responses:
         "200":
           description: The entry.
@@ -416,6 +418,92 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateEntry
+      summary: Edit an entry
+      description: |
+        Replaces the amount, category, vendor, entry date and note of the
+        entry. The kind and the currency never change. The rules for recording
+        apply: an income amount must be more than 0, an expense amount must not
+        be 0, the category must be of the entry's kind, the note is stored
+        trimmed, and a `vendorName` names one of the user's vendors or creates
+        one. An absent or blank `vendorName` leaves the entry without a vendor.
+
+        An edit carries no `Idempotency-Key`: sending the same edit again
+        changes nothing more. A deleted entry answers 404.
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EntryChange"
+      responses:
+        "200":
+          description: The entry after the edit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "422":
+          $ref: "#/components/responses/UnprocessableContent"
+    delete:
+      operationId: deleteEntry
+      summary: Delete an entry
+      description: |
+        The entry leaves every list and report at once. `restoreEntry` brings
+        it back; deleted entries are never purged. Deleting a deleted entry
+        answers 204 again.
+      tags: [entries]
+      responses:
+        "204":
+          description: The entry is deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+  /api/entries/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: restoreEntry
+      summary: Undo deleting an entry
+      description: |
+        Brings a deleted entry back, with the same id and contents. An entry
+        that is not deleted is answered as it is.
+      tags: [entries]
+      responses:
+        "200":
+          description: The restored entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
   /healthz:
     get:
       operationId: getHealthz
@@ -597,6 +685,26 @@ components:
           type: string
           format: uuid
           description: A category of the same kind.
+        vendorName:
+          type: string
+          description: Who the expense was paid to or the income came from. Absent or blank means no vendor.
+        entryDate:
+          type: string
+          format: date
+        note:
+          type: string
+    EntryChange:
+      type: object
+      required: [amount, categoryId, entryDate]
+      properties:
+        amount:
+          type: integer
+          format: int64
+          description: In minor units of the entry's currency; negative only for a refund.
+        categoryId:
+          type: string
+          format: uuid
+          description: A category of the entry's kind.
         vendorName:
           type: string
           description: Who the expense was paid to or the income came from. Absent or blank means no vendor.

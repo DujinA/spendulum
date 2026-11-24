@@ -111,14 +111,83 @@ func (h Handler) GetEntry(ctx context.Context, req gen.GetEntryRequestObject) (g
 
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return gen.GetEntry404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse: gen.NotFoundApplicationProblemPlusJSONResponse(problem.New(http.StatusNotFound, "")),
-		}, nil
+		return gen.GetEntry404ApplicationProblemPlusJSONResponse{NotFoundApplicationProblemPlusJSONResponse: notFound()}, nil
 	case err != nil:
 		return nil, err
 	}
 
 	return gen.GetEntry200JSONResponse(toJSON(e)), nil
+}
+
+func (h Handler) UpdateEntry(ctx context.Context, req gen.UpdateEntryRequestObject) (gen.UpdateEntryResponseObject, error) {
+	session, _ := auth.SessionFrom(ctx)
+
+	e, err := h.svc.Update(ctx, session.UserID, req.Id, Change{
+		Amount:     req.Body.Amount,
+		CategoryID: req.Body.CategoryId,
+		VendorName: valueOf(req.Body.VendorName),
+		EntryDate:  req.Body.EntryDate.Time,
+		Note:       valueOf(req.Body.Note),
+	})
+
+	if rule, ok := errors.AsType[RuleError](err); ok {
+		h.logger.InfoContext(ctx, "entry edit refused", slog.String("user_id", session.UserID.String()), slog.String("reason", rule.Error()))
+
+		return gen.UpdateEntry422ApplicationProblemPlusJSONResponse{
+			UnprocessableContentApplicationProblemPlusJSONResponse: gen.UnprocessableContentApplicationProblemPlusJSONResponse(
+				problem.New(http.StatusUnprocessableEntity, rule.Error()),
+			),
+		}, nil
+	}
+
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return gen.UpdateEntry404ApplicationProblemPlusJSONResponse{NotFoundApplicationProblemPlusJSONResponse: notFound()}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	h.logger.InfoContext(ctx, "entry updated", slog.String("user_id", session.UserID.String()), slog.String("entry_id", e.ID.String()))
+
+	return gen.UpdateEntry200JSONResponse(toJSON(e)), nil
+}
+
+func (h Handler) DeleteEntry(ctx context.Context, req gen.DeleteEntryRequestObject) (gen.DeleteEntryResponseObject, error) {
+	session, _ := auth.SessionFrom(ctx)
+
+	err := h.svc.Delete(ctx, session.UserID, req.Id)
+
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return gen.DeleteEntry404ApplicationProblemPlusJSONResponse{NotFoundApplicationProblemPlusJSONResponse: notFound()}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	h.logger.InfoContext(ctx, "entry deleted", slog.String("user_id", session.UserID.String()), slog.String("entry_id", req.Id.String()))
+
+	return gen.DeleteEntry204Response{}, nil
+}
+
+func (h Handler) RestoreEntry(ctx context.Context, req gen.RestoreEntryRequestObject) (gen.RestoreEntryResponseObject, error) {
+	session, _ := auth.SessionFrom(ctx)
+
+	e, err := h.svc.Restore(ctx, session.UserID, req.Id)
+
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return gen.RestoreEntry404ApplicationProblemPlusJSONResponse{NotFoundApplicationProblemPlusJSONResponse: notFound()}, nil
+	case err != nil:
+		return nil, err
+	}
+
+	h.logger.InfoContext(ctx, "entry restored", slog.String("user_id", session.UserID.String()), slog.String("entry_id", e.ID.String()))
+
+	return gen.RestoreEntry200JSONResponse(toJSON(e)), nil
+}
+
+func notFound() gen.NotFoundApplicationProblemPlusJSONResponse {
+	return gen.NotFoundApplicationProblemPlusJSONResponse(problem.New(http.StatusNotFound, ""))
 }
 
 func listBadRequest(detail string) gen.ListEntries400ApplicationProblemPlusJSONResponse {

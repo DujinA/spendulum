@@ -47,6 +47,7 @@ type Entry struct {
 	Note       string
 	CreatedAt  time.Time
 	VendorID   *uuid.UUID
+	DeletedAt  pgtype.Timestamptz
 }
 
 type ExchangeRate struct {

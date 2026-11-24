@@ -63,7 +63,7 @@ SELECT DISTINCT ON (e.vendor_id)
     e.currency
 FROM entries e
 JOIN categories c ON c.user_id = e.user_id AND c.id = e.category_id
-WHERE e.user_id = $1 AND e.kind = $2 AND e.vendor_id IS NOT NULL
+WHERE e.user_id = $1 AND e.kind = $2 AND e.vendor_id IS NOT NULL AND e.deleted_at IS NULL
 ORDER BY e.vendor_id, e.entry_date DESC, e.created_at DESC, e.id DESC
 `
 

@@ -37,21 +37,61 @@ func (p *Postgres) DeleteExpiredKeys(ctx context.Context, userID uuid.UUID, crea
 }
 
 func (p *Postgres) Create(ctx context.Context, userID uuid.UUID, e Entry) error {
-	var vendorID *uuid.UUID
-	if e.VendorID != uuid.Nil {
-		vendorID = &e.VendorID
-	}
-
 	err := p.q.CreateEntry(ctx, gen.CreateEntryParams{
 		ID: e.ID, UserID: userID, Kind: string(e.Kind), Amount: e.Amount, Currency: e.Currency,
-		CategoryID: e.CategoryID, VendorID: vendorID, EntryDate: e.EntryDate, Note: e.Note, CreatedAt: e.CreatedAt,
+		CategoryID: e.CategoryID, VendorID: vendorRef(e.VendorID), EntryDate: e.EntryDate, Note: e.Note, CreatedAt: e.CreatedAt,
 	})
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == foreignKeyViolation && pgErr.ConstraintName == categoryForeignKey {
+	if isCategoryViolation(err) {
 		return ErrUnknownCategory
 	}
 
 	if err != nil {
 		return fmt.Errorf("entry: insert: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Postgres) Update(ctx context.Context, userID uuid.UUID, e Entry) error {
+	n, err := p.q.UpdateEntry(ctx, gen.UpdateEntryParams{
+		Amount: e.Amount, CategoryID: e.CategoryID, VendorID: vendorRef(e.VendorID), EntryDate: e.EntryDate, Note: e.Note,
+		UserID: userID, ID: e.ID,
+	})
+	if isCategoryViolation(err) {
+		return ErrUnknownCategory
+	}
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("entry: update: %w", err)
+	case n == 0:
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (p *Postgres) Delete(ctx context.Context, userID, id uuid.UUID, at time.Time) error {
+	n, err := p.q.DeleteEntry(ctx, gen.DeleteEntryParams{DeletedAt: at, UserID: userID, ID: id})
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("entry: delete: %w", err)
+	case n == 0:
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (p *Postgres) Restore(ctx context.Context, userID, id uuid.UUID) error {
+	n, err := p.q.RestoreEntry(ctx, gen.RestoreEntryParams{UserID: userID, ID: id})
+
+	switch {
+	case err != nil:
+		return fmt.Errorf("entry: restore: %w", err)
+	case n == 0:
+		return ErrNotFound
 	}
 
 	return nil
@@ -134,6 +174,20 @@ func (p *Postgres) EarliestEntryDate(ctx context.Context) (time.Time, bool, erro
 	}
 
 	return d, true, nil
+}
+
+func vendorRef(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+
+	return &id
+}
+
+func isCategoryViolation(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+
+	return ok && pgErr.Code == foreignKeyViolation && pgErr.ConstraintName == categoryForeignKey
 }
 
 func fromRow(r gen.EntriesRow) Entry {

@@ -28,6 +28,7 @@ const (
 	ErrUnknownCategory   RuleError = "The category does not exist or is of the other kind."
 	ErrEntryDateRequired RuleError = "An entry date is required."
 	ErrKeyReused         RuleError = "This Idempotency-Key was already used for a different entry."
+	ErrKeyEntryDeleted   RuleError = "The entry this Idempotency-Key recorded was deleted."
 	ErrVendorNameBlank   RuleError = "A vendor name needs at least one letter or digit."
 )
 
@@ -58,27 +59,47 @@ type NewEntry struct {
 }
 
 func (n NewEntry) normalized() (NewEntry, error) {
-	n.VendorName = strings.TrimSpace(n.VendorName)
-	n.Note = strings.TrimSpace(n.Note)
-
-	switch {
-	case n.Kind != category.Expense && n.Kind != category.Income:
-		return NewEntry{}, ErrUnknownKind
-	case n.Kind == category.Income && n.Amount <= 0:
-		return NewEntry{}, ErrIncomeNotPositive
-	case n.Kind == category.Expense && n.Amount == 0:
-		return NewEntry{}, ErrExpenseZero
-	case n.Amount < -9007199254740991 || n.Amount > 9007199254740991:
-		return NewEntry{}, RuleError("The amount is outside the supported range.")
-	case n.CategoryID == uuid.Nil:
-		return NewEntry{}, ErrCategoryRequired
-	case n.EntryDate.IsZero():
-		return NewEntry{}, ErrEntryDateRequired
-	case n.VendorName != "" && namekey.Of(n.VendorName) == "":
-		return NewEntry{}, ErrVendorNameBlank
+	c, err := Change{Amount: n.Amount, CategoryID: n.CategoryID, VendorName: n.VendorName, EntryDate: n.EntryDate, Note: n.Note}.normalized(n.Kind)
+	if err != nil {
+		return NewEntry{}, err
 	}
 
+	n.VendorName, n.Note = c.VendorName, c.Note
+
 	return n, nil
+}
+
+// Change is an edit of an entry: its kind and currency never change, and an empty vendor name is no vendor.
+type Change struct {
+	Amount     int64
+	CategoryID uuid.UUID
+	VendorName string
+	EntryDate  time.Time
+	Note       string
+}
+
+func (c Change) normalized(kind category.Kind) (Change, error) {
+	c.VendorName = strings.TrimSpace(c.VendorName)
+	c.Note = strings.TrimSpace(c.Note)
+
+	switch {
+	case kind != category.Expense && kind != category.Income:
+		return Change{}, ErrUnknownKind
+	case kind == category.Income && c.Amount <= 0:
+		return Change{}, ErrIncomeNotPositive
+	case kind == category.Expense && c.Amount == 0:
+		return Change{}, ErrExpenseZero
+	case c.Amount < -9007199254740991 || c.Amount > 9007199254740991:
+		return Change{}, RuleError("The amount is outside the supported range.")
+	case c.CategoryID == uuid.Nil:
+		return Change{}, ErrCategoryRequired
+	case c.EntryDate.IsZero():
+		return Change{}, ErrEntryDateRequired
+	case c.VendorName != "" && namekey.Of(c.VendorName) == "":
+		return Change{}, ErrVendorNameBlank
+	}
+
+	return c, nil
 }
 
 // fingerprint tells a retry of a request from a different request under the same key.
