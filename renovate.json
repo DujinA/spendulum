@@ -51,8 +51,8 @@
       "groupName": "Helm charts"
     },
     {
-      "description": "The Playwright image must match @playwright/test.",
-      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "description": "Its own PR: task e2e runs the Playwright image of the same version.",
+      "matchPackageNames": ["@playwright/test"],
       "groupName": "Playwright"
     },
     {
@@ -63,11 +63,6 @@
     {
       "matchManagers": ["gomod"],
       "matchFileNames": ["backend/tools/go.mod", "deploy/go.mod"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
-    },
-    {
-      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     },

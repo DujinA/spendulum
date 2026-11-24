@@ -180,6 +180,9 @@ tasks:
         sh: id -u
       E2E_GID:
         sh: id -g
+      # The Playwright image must run the same version as @playwright/test.
+      PLAYWRIGHT_VERSION:
+        sh: node -p "require('./e2e/package.json').devDependencies['@playwright/test']"
       # A fake account for the login journey; the database lives in tmpfs and goes away after the run.
       E2E_EMAIL: e2e@example.test
       E2E_PASSWORD: e2e-password-not-secret
