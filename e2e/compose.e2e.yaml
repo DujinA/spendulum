@@ -51,7 +51,7 @@ services:
         condition: service_started
 
   playwright:
-    image: mcr.microsoft.com/playwright:v1.65.1-noble
+    image: mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION:?task e2e sets it from @playwright/test in e2e/package.json}-noble
     profiles: ["test"]
     working_dir: /work/e2e
     command: ["npx", "--no-install", "playwright", "test"]

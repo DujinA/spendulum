@@ -1,6 +1,7 @@
 package deploy_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -633,6 +634,37 @@ func TestE2ETaskUsesAGivenImageInsteadOfBuildingOne(t *testing.T) {
 
 	if !strings.Contains(cmds, "E2E_IMAGE") {
 		t.Errorf("task e2e ignores E2E_IMAGE:\n%s", cmds)
+	}
+}
+
+func TestE2ERunsThePlaywrightImageOfThePlaywrightTestVersion(t *testing.T) {
+	var pkg struct {
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, "../e2e/package.json")), &pkg); err != nil {
+		t.Fatal(err)
+	}
+
+	if v := pkg.DevDependencies["@playwright/test"]; !regexp.MustCompile(`^\d+\.\d+\.\d+$`).MatchString(v) {
+		t.Errorf("@playwright/test = %q, want an exact version: it names the Playwright image tag", v)
+	}
+
+	var compose struct {
+		Services map[string]struct{ Image string }
+	}
+	loadYAML(t, "../e2e/compose.e2e.yaml", &compose)
+
+	if image := compose.Services["playwright"].Image; !strings.HasPrefix(image, "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION:?") {
+		t.Errorf("playwright image = %q, want its tag from a required PLAYWRIGHT_VERSION", image)
+	}
+
+	var tf struct {
+		Tasks map[string]struct{ Env map[string]any }
+	}
+	loadYAML(t, "../Taskfile.yml", &tf)
+
+	if env := fmt.Sprint(tf.Tasks["e2e"].Env["PLAYWRIGHT_VERSION"]); !strings.Contains(env, "e2e/package.json") || !strings.Contains(env, "@playwright/test") {
+		t.Errorf("task e2e sets PLAYWRIGHT_VERSION to %s, want the @playwright/test version from e2e/package.json", env)
 	}
 }
 

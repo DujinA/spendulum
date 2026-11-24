@@ -92,7 +92,6 @@ func TestRenovateGroupsUpdatesPerEcosystem(t *testing.T) {
 		{renovateUpdate{"github-actions", "action", "minor", ".github/workflows/ci.yml", "actions/checkout"}, "GitHub Actions"},
 		{renovateUpdate{"argocd", "", "minor", "deploy/argocd/cert-manager.yaml", "cert-manager"}, "Helm charts"},
 		{renovateUpdate{"npm", "devDependencies", "minor", "e2e/package.json", "@playwright/test"}, "Playwright"},
-		{renovateUpdate{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, "Playwright"},
 	} {
 		if got, _ := c.resolve(tc.u); got != tc.want {
 			t.Errorf("%s %s in %s: group = %q, want %q", tc.u.manager, tc.u.pkg, tc.u.file, got, tc.want)
@@ -112,7 +111,6 @@ func TestRenovateAutomergesOnlyDevDependencyAndActionPatchesAndMinors(t *testing
 		{renovateUpdate{"gomod", "require", "minor", "backend/tools/go.mod", "github.com/sqlc-dev/sqlc"}, true},
 		{renovateUpdate{"github-actions", "action", "patch", ".github/workflows/ci.yml", "actions/checkout"}, true},
 		{renovateUpdate{"github-actions", "action", "digest", ".github/workflows/ci.yml", "actions/checkout"}, true},
-		{renovateUpdate{"docker-compose", "", "minor", "e2e/compose.e2e.yaml", "mcr.microsoft.com/playwright"}, true},
 		{renovateUpdate{"npm", "devDependencies", "major", "web/package.json", "vite"}, false},
 		{renovateUpdate{"github-actions", "action", "major", ".github/workflows/ci.yml", "actions/checkout"}, false},
 		{renovateUpdate{"npm", "dependencies", "minor", "web/package.json", "react"}, false},
